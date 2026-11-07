@@ -350,6 +350,10 @@
   // ---- Specs: the requirements in the margin, beside the prose that cites them ---------------
 
   // A walkthrough's margin of requirements can be put away, and stays as left
+  // The margin's state, before anything lays it out
+  let marginRows = []; // [the prose's top, how far below it its cards are], in the document's terms
+  let focusCard = null; // the card you came for, which `followMargin` lines up rather than its group
+  let marginHeld = null; // [a card, the block it's held beside], or true once scrolled by hand
   function toggleMargin(set) {
     const prose = $("#prose");
     const off = set ?? !prose.classList.contains("no-margin");
@@ -363,8 +367,6 @@
   // Each group of cards beside the prose citing it, or below the group before it if that's
   // in the way. Reading a page, the margin is its own pane, scrolled to follow the prose:
   // see `followMargin`.
-  let marginRows = []; // [the prose's top, how far below it its cards are], in the document's terms
-  let focusCard = null; // the card you came for, which `followMargin` lines up rather than its group
   function layoutMargin() {
     const margin = $("#margin");
     const doc = $(".spec-doc");
@@ -394,7 +396,6 @@
   // each group lined up with its prose until the next is near, then easing to the next's
   // offset, so it keeps up as the page scrolls. Scrolled itself, it stays where it's put
   // until the page scrolls.
-  let marginHeld = null; // [a card, the block it's held beside], or true once scrolled by hand
   function followMargin() {
     const margin = $("#margin");
     const doc = $(".spec-doc");
