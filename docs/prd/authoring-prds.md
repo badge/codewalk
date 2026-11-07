@@ -217,7 +217,8 @@ one, as it does for a broken reference.
 
 r[proposal.change]
 A `walk proposed change` block MUST be read as a change proposed to the symbol it names,
-showing its draft against the symbol's code as it is, and counted as proposed until it's
+showing the difference from the symbol's code as it is to the draft, so what the change
+adds shows as added and what it takes out as removed, and counted as proposed until it's
 settled; settling it MUST turn it into a `walk settled` block, keeping the draft. A
 change to a name that doesn't resolve MUST be reported as broken.
 
@@ -234,9 +235,10 @@ or change a branch or a worktree.
 The shape of the change, in the order of the spec: the data model in full, and the code
 that implements each requirement, in full where it's intricate and by its signature where
 it's routine. Changes to code that exists are in `walk proposed change` blocks, which
-codewalk can't read yet (`proposal.change` is part of this): for now each shows as
-written, with its draft against the code as it is, which is the view we want, under the
-wrong label.
+codewalk can't read yet (`proposal.change` is part of this): for now each shows as written,
+compared the way a written proposal is, from the draft to the code, so what the change
+adds shows as removed. Once `proposal.change` is done it's shown from the code to the
+draft, so the additions show as added.
 
 ### The data model
 
@@ -657,8 +659,11 @@ def progress(self) -> Progress:
     )
 ```
 
-A change whose name doesn't resolve is broken, not in hand. The block shows its draft
-against the code, with **Settle** offered from the start, and [[doc::settle]] turns
+A change whose name doesn't resolve is broken, not in hand. The block shows the difference
+the other way round from a written proposal: a written proposal is shown from its draft to
+the code (what was planned, then what was written), but a change from the code to its
+draft (what there is, then what there will be), so [[Renderer::proposal]] swaps the two
+for a change. It's offered **Settle** from the start, and [[doc::settle]] turns
 `walk proposed change` into `walk settled` as it does `walk proposed`. `codewalk context`
 lists a change under "proposed, not written yet" until it's settled.
 
