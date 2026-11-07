@@ -30,9 +30,9 @@ Code that doesn't exist yet can be proposed: drafted in a `walk proposed` block 
 name it will have (`proposal.draft`). Until the name exists, it's in hand, not broken
 (`proposal.pending`). Once it does, the proposal shows what was written against the
 draft, and can be settled: the block becomes `walk settled`, keeping the draft, so what
-was planned and what was done stay side by side (`proposal.settle`). A PRD is a
-walkthrough whose code is all proposed, so its progress is how much is settled
-(`proposal.progress`).
+was planned and what was done stay side by side (`proposal.settle`). A walkthrough's
+progress is how much of what it proposes is settled (`proposal.progress`); a PRD starts
+all proposed and ends all settled.
 
 ### What's in hand
 
@@ -63,10 +63,6 @@ written. Once written, it's settled: the block keeps the draft beside the code.
 t[settled]
 Finished with: a thread when nothing in it is open, and a proposal when its block is
 `walk settled`, keeping the draft beside the code as it was written.
-
-t[prd]
-A walkthrough whose code is all proposed, written before the work; its progress is how
-much of it is settled.
 
 t[in-hand]
 Begun and not finished: an open question or request, a proposal not written or not
