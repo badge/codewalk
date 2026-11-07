@@ -5,9 +5,17 @@ that **names** the code it talks about rather than pasting it. codewalk checks e
 still resolves, shows each one's code as it stands, with its context a click away, and
 remembers what you've reviewed, so it can show you what's changed since.
 
-ancillaries-service's ERCOT ERS strict deep dive is written this way, and so is
-[codewalk's own walkthrough](docs/walkthrough.md), which is the best way to see how it
-works. [Its data model](docs/data_model.md) shows how the pieces relate.
+codewalk is written about in codewalk:
+
+- [codewalk, walked through](docs/walkthrough.md): how it works, from parsing a
+  walkthrough to the page in the browser.
+- [Its data model](docs/data_model.md): the things it knows about and how they relate.
+- [Its spec](docs/spec/README.md): what it must do, as prose and the requirements that
+  follow from it.
+- [Its glossary](docs/glossary.md): the words it uses with a meaning of their own.
+
+Every example below names codewalk's own code, and a test checks each one still
+resolves.
 
 ## Running it
 
@@ -18,70 +26,70 @@ repository, editable so it follows your checkout:
 uv tool install --editable .
 ```
 
-Then, from the root of the repository you want to walk through:
+Then, from the root of the repository you want to walk through (this one, to start
+with):
 
 ```bash
 codewalk serve
 ```
 
 Then open <http://localhost:4471>. Everything stays local: the server listens on
-127.0.0.1 only. The only files it writes are walkthroughs, when you save one in the
-browser, and `codewalk.review.json`.
+127.0.0.1 only. The only files it writes are walkthroughs and specs, when you save one in
+the browser, and `codewalk.review.json`. Ctrl-C stops it.
 
-| Command                             | What it does                                                    |
-| ----------------------------------- | --------------------------------------------------------------- |
-| `codewalk serve [--port 4471]`      | The web view, with editing and live reload                      |
-| `codewalk check [WALKTHROUGH...]`   | Every reference resolves; exits 1 if one doesn't                |
-| `codewalk check --strict`           | The same, and also fails on code changed since it was reviewed  |
-| `codewalk export WALKTHROUGH OUT`   | Plain Markdown, with the code written out and linked            |
-| `codewalk review WALKTHROUGH`       | Marks every embedded symbol reviewed as it stands               |
-| `codewalk find QUERY`               | Symbols matching QUERY, with the reference to write             |
-| `codewalk context [--json]`         | What's in hand, for an agent starting a run                     |
-| `codewalk lsp`                      | A language server, for your editor                              |
-| `codewalk init [--dry-run]`         | Set a project up: config, an `AGENTS.md` section, two skills     |
+| Command                               | What it does                                                   |
+| ------------------------------------- | -------------------------------------------------------------- |
+| `codewalk serve [--port 4471]`        | The web view, with editing and live reload                     |
+| `codewalk check [WALKTHROUGH...]`     | Every reference resolves; exits 1 if one doesn't               |
+| `codewalk check --strict`             | The same, and also fails on code changed since it was reviewed |
+| `codewalk export WALKTHROUGH OUT`     | Plain Markdown, with the code written out and linked           |
+| `codewalk review WALKTHROUGH`         | Marks every embedded symbol reviewed as it stands              |
+| `codewalk find QUERY`                 | Symbols matching QUERY, with the reference to write            |
+| `codewalk context [--json]`           | What's in hand, for an agent starting a run                    |
+| `codewalk lsp`                        | A language server, for your editor                             |
+| `codewalk init [--dry-run]`           | Set a project up: config, an `AGENTS.md` section, two skills   |
 | `codewalk new PATH --title T [--prd]` | Start a walkthrough, or a PRD                                  |
 
 ## Writing a walkthrough
 
 Any Markdown file under the docs folders that makes a reference is a walkthrough. Names
-can point into Rust or Python. There are three kinds of reference, and each still reads
+can point into Python or Rust. There are three kinds of reference, and each still reads
 as plain Markdown:
 
 ````markdown
-Each reading reaches [[BatteryController::on_site_load]], which holds the site to
-[[r:program.ercot-ers-strict.hold]]. The fleet sends it on as
-[an update](walk:FleetProcessed::updates).
+A walkthrough is parsed into a [[Walk]], and every name in it is checked by
+[[Walk::problems]], against [[r:ref.tail]]. A line of a `walk` block is read by
+[an ordinary link](walk:embed_line).
 
 ```walk
-BatteryController::on_site_load
-Dispatch::on_short sig
-program_terms > ProgramKind::ErcotErsStrict =>
-impl Hold
+Walk::problems
+doc::Context sig
+Renderer::embed > if ref.sig
 ```
 ````
 
-| Written                        | Shown as                                                      |
-| ------------------------------ | ------------------------------------------------------------- |
-| `[[Name]]`, `[[Name\|label]]`  | The name, linked: hover for its signature and docs, click for its file |
-| `[label](walk:Name)`           | The same, as an ordinary Markdown link                        |
-| `[[r:requirement.id]]`         | The requirement, linked: hover for its text                   |
-| A `walk` block                 | Each line's code, with its doc comments, markers and line numbers |
+| Written                       | Shown as                                                                |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| `[[Name]]`, `[[Name\|label]]` | The name, linked: hover for its signature and docs, click for its file  |
+| `[label](walk:Name)`          | The same, as an ordinary Markdown link                                  |
+| `[[r:requirement.id]]`        | The requirement, linked: hover for its text                             |
+| A `walk` block                | Each line's code, with its docs, requirement markers and line numbers   |
 
-**Names.** A name is any tail of a symbol's path that names only it: `on_short` if
-there's one, `Dispatch::on_short` if there are several. Methods, fields and variants
-keep their type (`Hold::power_kw`). An impl block is `impl` and its type (`impl Hold`,
-`impl ProgramRules for ErcotErsStrict`). To pin one down further:
+**Names.** A name is any tail of a symbol's path that names only it: `embed_line` if
+there's one, `Renderer::embed` if there are several `embed`s. Methods and fields keep
+their class (`Walk::problems`, `FrontMatter::weight`). In Rust, an impl block is `impl`
+and its type. To pin one down further:
 
-| Write                      | To mean                                                     |
-| -------------------------- | ----------------------------------------------------------- |
-| `crate::Battery`           | The one at the crate root, not any `…::Battery`             |
-| `fleet.rs#BatteryUpdate`   | The one in that file. Any tail of its path will do          |
+| Write                    | To mean                                                     |
+| ------------------------ | ----------------------------------------------------------- |
+| `crate::codewalk::config::Config` | The one whose whole path that is, not any `…::config::Config` |
+| `doc.py#Context`         | The one in that file. Any tail of its path will do          |
 
 **In a `walk` block**, one name per line. `//` starts a comment.
 
 | After the name  | Shows                                                                     |
 | --------------- | ------------------------------------------------------------------------- |
-| `sig`           | Only the doc comments and the first line                                  |
+| `sig`           | Its outline: for Python, its header and docstring, and for a class, its fields and `__init__`'s header and docstring too; for Rust, its doc comments and first line |
 | `> some text`   | Only part of it: from the first line containing the text, with the comments just above it, through the end of the block that line opens |
 
 A name that's ambiguous or names nothing is an error. `check` and the editor list the
@@ -92,10 +100,11 @@ alone:
 
 ```yaml
 ---
-title: Running an ERCOT ERS strict dispatch   # else the first heading
-summary: One dispatch, from Voltus's poll to the batteries freed.   # else the first paragraph
-tags: [ercot, dispatch]
-related: [overview.md]   # paths from this file
+title: codewalk, walked through   # else the first heading
+summary: How codewalk turns Markdown that names code into a page.   # else the first paragraph
+tags: [codewalk, tooling]
+related: [data_model.md]   # paths from this file
+weight: 10   # where it goes in its folder: lighter first, then the rest by title
 ---
 ```
 
@@ -106,9 +115,10 @@ end shows the link: what a walkthrough links to, and what links to it.
 name it will have:
 
 ````markdown
-```walk proposed rust
-Dispatch::rebalance
-pub(super) fn rebalance(&mut self, now: DateTime<Utc>) -> Rebalanced { … }
+```walk proposed python
+Library::uses
+def uses(self, ctx: Context, sym: Symbol) -> list[tuple[str, int]]:
+    """The walkthroughs that show or mention `sym`, with the line of each reference."""
 ```
 ````
 
@@ -127,11 +137,11 @@ built, with the plan kept under each excerpt. Its front matter says `kind: prd`.
 **Notes** are blockquotes, written under what they're about:
 
 ```markdown
-> [!question] @matthew: Why per battery?
+> [!question] @matthew: Should `sig` show a class's methods too?
 >
-> [!answer] @claude: Because …
+> [!answer] @claude: Only `__init__`: it's how the class is made.
 >
-> [!decision] @matthew: Per battery.
+> [!decision] @matthew: Only `__init__`.
 ```
 
 A thread is open until its last question is answered or decided. A `[!request]` is a
@@ -144,26 +154,26 @@ at any depth, is. Once it's settled, **To changelog** takes it out of the text a
 one line of it in a `## Changelog` at the end (what was asked, how it was settled, how
 many notes came between), newest first, and **Remove** takes it out altogether.
 
-Write notes in the Markdown, or from the browser: **Ask** on an excerpt, **Answer**, **Ask more** or
-**Decide** on a thread, and **Reply** on any note. Notes from the browser are signed with `author` from
-`codewalk.toml`, or the first word of git's `user.name`.
+Write notes in the Markdown, or from the browser: **Ask** on an excerpt, **Answer**,
+**Ask more** or **Decide** on a thread, and **Reply** on any note. Asking about one
+excerpt of several in a block puts the question directly under it. Notes from the browser
+are signed with `author` from `codewalk.toml`, or the first word of git's `user.name`.
 
 **Terms and facts** are defined like tracey's requirements, a marker on its own line and
-the text after; tracey ignores them:
+the text after; tracey ignores them. From [codewalk's glossary](docs/glossary.md):
 
 ```markdown
-t[deadband]
-How far above its target a site's import can rise before we act.
+t[excerpt]
+The code a line of a `walk` block shows: a symbol as it stands in its file.
 
-f[ercot.ers.settlement-periods] documented
-ERCOT judges a dispatch in 15-minute settlement periods.
+f[tracey.prefix] documented
+tracey infers a spec's prefix, the `r` in `r[id]`, from the requirement markers in its files.
 ```
 
 A fact says how we know it: `documented`, `observed` or `assumed` (the default). Cite
-them with `[[t:deadband]]`, `[[f:…]]`, or `term:` and `fact:` links. A term is also
-linked wherever its words appear in prose (the first time in each paragraph), so any use
-of it can be hovered for what it means. ancillaries-service's are in its
-`docs/glossary.md`.
+them with `[[t:excerpt]]`, `[[f:tracey.prefix]]`, or `term:` and `fact:` links. A term is
+also linked wherever its words appear in prose (the first time in each paragraph), so any
+use of it can be hovered for what it means.
 
 [`SYNTAX.md`](SYNTAX.md) has all of it as a grammar.
 
@@ -171,9 +181,9 @@ of it can be hovered for what it means. ancillaries-service's are in its
 
 A spec's prose says what we mean; its requirements say exactly what must happen, and
 they're written from the prose. The prose cites the requirements it gives rise to, as an
-ID in backticks (`` `program.ercot-ers-strict.end` ``), `[[r:id]]` (for one not written
-yet), or a `req:` link. `/spec/<file>` shows the prose with each cited requirement in the
-margin beside it, and lists:
+ID in backticks (`` `ref.tail` ``), `[[r:id]]` (for one not written yet), or a `req:`
+link. `/spec/<file>` shows the prose with each cited requirement in the margin beside it,
+and lists:
 
 - requirements no prose cites;
 - citations of requirements that don't exist yet;
@@ -182,23 +192,28 @@ margin beside it, and lists:
 
 Each requirement shows the code that implements and verifies it, from tracey's markers,
 and the walkthroughs that propose, implement or cite it. That's for finding the code;
-coverage and validation are tracey's.
+coverage and validation are tracey's. The spec files are the ones tracey's config
+(`.config/tracey/config.styx`) names, and any more in `codewalk.toml`. A requirement is
+`r[id]`, or with a spec's name as its prefix (`codewalk[id]`); codewalk's own
+[spec](docs/spec/README.md) uses `r`.
 
 **Prose, spec and code, side by side.** A walkthrough's margin shows, level with each
 block, the requirements the block proposes, implements, verifies or cites (from the
-markers in its code, written or drafted, and its citations), each with the prose in its
-spec that gave rise to it. **Requirements**, or `m`, puts the margin away.
+markers in its code, written or drafted, and its citations). Each card leads to its spec,
+at the prose that gave rise to it, which stays lit until you click away. **Requirements**,
+or `m`, puts the margin away.
 
 ## In the browser
 
-- **The index.** Walkthroughs grouped by folder, filtered by tag or text (kept in the
-  URL), with a map of how they link.
-- **The walkthrough.** Each embedded symbol has a caption showing its kind and path, and
-  whether it's been reviewed. Its tags and related walkthroughs are in the sidebar. **Zed** opens it in Zed. **Copy** copies its name. Click
-  its path or line to see it in its file.
+- **The index.** Walkthroughs grouped by folder, in order of weight, filtered by tag or
+  text (kept in the URL); and the specs, as a tree of their folders.
+- **The walkthrough.** Each excerpt has a caption showing its kind and path, and whether
+  it's been reviewed. Its tags and related walkthroughs are in the sidebar. **Zed** opens
+  it in Zed. **Copy** copies its name. Click its path or line, or any name in its code,
+  to see it in its file.
 - **Its file.** The panel on the right shows the whole file, highlighted, with the symbol
   marked, and the file's outline docked on its right, to filter or put away (`o`).
-  Requirement markers in the code link to their text.
+  Requirement markers in the code link to their spec.
 - **Find a symbol**, with `/`. Enter shows it in its file. Shift+Enter copies the name to
   write.
 - **Editing.** Press `e`, or click Edit, to edit from where you're reading, with a live
@@ -213,23 +228,26 @@ spec that gave rise to it. **Requirements**, or `m`, puts the margin away.
 
 ## Reviewing
 
-**Reviewed**, on an embedded symbol, records its code as it stands in
-`codewalk.review.json` at the repository root. Commit that file, so the record travels
-with the code. When the code changes, the badge turns to **changed since review**. Click
-it to see what changed since you reviewed it, then mark it reviewed again. **Mark all
-reviewed** does the whole walkthrough.
+**Reviewed**, on an excerpt, records its code as it stands in `codewalk.review.json` at
+the repository root. Commit that file, so the record travels with the code. When the code
+changes, the badge turns to **changed since review**. Click it to see what changed since
+you reviewed it, then mark it reviewed again. **Mark all reviewed** does the whole
+walkthrough.
 
 ## For agents
 
-`codewalk context` is what a session should pick up: open questions (with what they're
-about), proposals not written yet, proposals written and waiting to be settled, code
-changed since review, and broken references. `codewalk init` sets a project up for it:
+`codewalk context` is what a session should pick up, across walkthroughs and specs:
+standing requests, open questions (with what they're about), proposals not written yet,
+proposals written and waiting to be settled, code changed since review, and broken
+references. `codewalk init` sets a project up for it:
 
 - `codewalk.toml`, if there isn't one;
 - a section in `AGENTS.md`, between markers, saying how walkthroughs, specs and the
   glossary work (running init again replaces it);
 - two skills in `.claude/skills/`: `codewalk-propose`, to propose a change as a
   walkthrough before writing it, and `codewalk-work`, to carry one forward.
+
+This repository is set up that way: see its [`AGENTS.md`](AGENTS.md).
 
 ## In your editor
 
@@ -240,8 +258,8 @@ names with candidates. Point your editor's Markdown at it. In Helix, for example
 
 ```toml
 [language-server.codewalk]
-command = "uv"
-args = ["tool", "run", "codewalk", "lsp"]
+command = "codewalk"
+args = ["lsp"]
 
 [[language]]
 name = "markdown"
@@ -253,42 +271,37 @@ server from an extension, which doesn't exist yet.
 
 ## Configuration
 
-Where it looks is set by an optional `codewalk.toml` at the repository root (this
-repository's adds codewalk's own source). These are the defaults:
+Where it looks is set by an optional `codewalk.toml` at the repository root. This
+repository's:
 
 ```toml
-sources = ["src/**/*.rs"]
+sources = ["codewalk/**/*.py"]
 specs = ["docs/spec/**/*.md"]
 docs = ["docs/**/*.md"]
 # Who notes written in the browser are from (default: git's user.name, first word)
 # author = "matthew"
 ```
 
-Specs are Markdown with tracey's markers: `r[id]` on its own line, then the text.
+Without one, `sources` is `src/**/*.rs`; `specs` and `docs` are as above.
 
-## How it works
+## How it's built
 
-| Module         | Does                                                                        |
-| -------------- | --------------------------------------------------------------------------- |
-| `config.py`    | `codewalk.toml`, as a Pydantic model                                        |
-| `index.py`     | Parses Rust with tree-sitter into symbols, each with its span, docs and requirement markers; resolves names. Each file is parsed again only when it changes |
-| `python.py`    | The same for Python                                                         |
-| `doc.py`       | Parses a walkthrough with markdown-it: references, front matter, links; checks it; exports it |
-| `library.py`   | All the walkthroughs together: tags, folders and how they link; the specs   |
-| `notes.py`     | Threads of questions, answers and decisions, read and written               |
-| `brief.py`     | What's in hand, for `codewalk context`                                      |
-| `spec.py`      | A spec's prose against its requirements: citations, gaps, drift             |
-| `trail.py`     | Prose to spec to code: the requirements each block of a walkthrough bears on |
-| `terms.py`     | Terms and facts                                                             |
-| `lsp.py`       | The language server, on pygls                                               |
-| `setup/`       | `codewalk init`, and the `AGENTS.md` section and skills it writes           |
-| `render.py`    | A walkthrough as HTML, every block tagged with its Markdown line            |
-| `highlight.py` | Highlights a file with Pygments, one line at a time, so any range can be cut out |
-| `review.py`    | The review file, and diffs                                                  |
-| `server.py`    | Starlette under uvicorn; watchfiles and server-sent events for live reload  |
-| `cli.py`       | The commands, with rich-click                                               |
-| `templates/`   | The pages and the markup for an embedded symbol, in Jinja                   |
-| `static/`      | The page's script and styles, plain JS and CSS                              |
+| Package or module | Does                                                                     |
+| ----------------- | ------------------------------------------------------------------------ |
+| `cli.py`          | The commands, with rich-click                                            |
+| `config.py`       | `codewalk.toml`, as a Pydantic model                                     |
+| `code/`           | The code: `index.py` parses Rust with tree-sitter into symbols, each with its span, docs and requirement markers, and resolves names; `python.py` does the same for Python; `highlight.py` highlights a file with Pygments, a line at a time, so any range can be cut out |
+| `walk/`           | Walkthroughs: `doc.py` parses one with markdown-it, checks it and exports it; `notes.py` reads and writes threads; `review.py` keeps the review file; `library.py` puts them all together; `brief.py` is what's in hand, for `codewalk context` |
+| `spec/`           | The spec: `requirements.py` reads them; `tracey.py` reads tracey's config; `prose.py` sets a spec's prose against its requirements (citations, gaps, drift); `trail.py` follows prose to spec to code; `terms.py` is the glossary |
+| `web/`            | The browser: `server.py`, Starlette under uvicorn, with watchfiles and server-sent events for live reload; `render.py`, a walkthrough as HTML, every block tagged with its Markdown line; `templates/` in Jinja; `static/`, plain JS and CSS |
+| `lsp.py`          | The language server, on pygls                                            |
+| `setup/`          | `codewalk init`, and the `AGENTS.md` section and skills it writes        |
+
+tracey holds the code and tests to [the spec](docs/spec/README.md):
+
+```bash
+tracey query . status
+```
 
 Tests and lint:
 

@@ -65,6 +65,7 @@ class ReviewState:
         self.load()
         return self.data.get(doc, {}).get(ref)
 
+    # r[impl review.record]
     def mark(self, doc: str, ref: str, digest: str, text: str) -> None:
         self.load()
         self.data.setdefault(doc, {})[ref] = Reviewed(digest=digest, text=text)

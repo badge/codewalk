@@ -12,8 +12,8 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
-from .config import Config, repo_root
-from .doc import Context, Walk
+from codewalk.config import Config, repo_root
+from codewalk.walk.doc import Context, Walk
 
 console = Console(highlight=False)
 
@@ -28,6 +28,8 @@ def main() -> None:
     pass
 
 
+# r[impl check.broken]
+# r[impl check.strict]
 @main.command()
 @click.argument("walkthroughs", nargs=-1)
 @click.option("--strict", is_flag=True, help="Fail on code changed since it was reviewed, too.")
@@ -54,11 +56,12 @@ def check(walkthroughs: tuple[str, ...], strict: bool) -> None:
     sys.exit(1 if errors or (strict and warnings) else 0)
 
 
+# r[impl serve.local]
 @main.command()
 @click.option("--port", default=4471, show_default=True, help="Port to listen on, on 127.0.0.1.")
 def serve(port: int) -> None:
     """The web view, with editing and live reload."""
-    from .server import serve as run
+    from codewalk.web.server import serve as run
 
     ctx = context()
     url = f"http://localhost:{port}"
@@ -77,11 +80,12 @@ def export(walkthrough: str, out: str) -> None:
     console.print(f"wrote {out}")
 
 
+# r[impl review.people]
 @main.command()
 @click.argument("walkthrough")
 def review(walkthrough: str) -> None:
     """Mark every embedded symbol reviewed as it stands."""
-    from .server import App
+    from codewalk.web.server import App
 
     done = App(context()).review(walkthrough, None)["reviewed"]
     console.print(f"{len(done)} symbols marked reviewed in {walkthrough}")
@@ -93,7 +97,7 @@ def review(walkthrough: str) -> None:
 @click.option("--walkthroughs", default="docs/walkthroughs", show_default=True, help="Where new walkthroughs go.")
 def init(dry_run: bool, command: str | None, walkthroughs: str) -> None:
     """Set codewalk up here: config, a section in AGENTS.md, and skills for agents."""
-    from .setup import init as run
+    from codewalk.setup import init as run
 
     for line in run(repo_root(), command, walkthroughs, dry_run):
         console.print(line)
@@ -124,7 +128,7 @@ def new(path: str, title: str, prd: bool) -> None:
 @main.command()
 def lsp() -> None:
     """A language server, over stdin and stdout, for editing walkthroughs and specs."""
-    from .lsp import main as run
+    from codewalk.lsp import main as run
 
     run()
 
@@ -136,10 +140,12 @@ def context_(walkthroughs: tuple[str, ...], as_json: bool) -> None:
     """What's in hand, for an agent starting a run: open questions, proposals, changes."""
     import json
 
-    from .brief import as_markdown, brief
+    from codewalk.walk.brief import as_markdown, brief
 
     ctx = context()
-    briefs = [brief(ctx, rel) for rel in (list(walkthroughs) or ctx.walkthroughs())]
+    # The specs too: a question about the prose is as much in hand as one about the code
+    rels = list(walkthroughs) or [*ctx.walkthroughs(), *ctx.spec_paths()]
+    briefs = [brief(ctx, rel) for rel in rels]
     if as_json:
         print(json.dumps([b.model_dump() for b in briefs], indent=2))
     else:

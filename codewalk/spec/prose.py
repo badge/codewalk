@@ -28,9 +28,9 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from . import tracey
-from .doc import WIKI, Context, Walk
-from .index import Requirement, SpecIndex
+from codewalk.spec import tracey
+from codewalk.spec.requirements import Requirement, SpecIndex
+from codewalk.walk.doc import WIKI, Context, Walk
 
 REQ_LINE = re.compile(rf"^[a-z][a-z0-9]*\[{tracey.ID}\]")
 CITE_CODE = re.compile(r"`([a-z0-9][a-z0-9.\-]*\.[a-z0-9.\-]+)`")
@@ -103,6 +103,7 @@ def _blocks(walk: Walk) -> list[tuple[int, int, str]]:
     return out
 
 
+# r[impl spec.cite]
 def cited_ids(text: str, known: SpecIndex, rel: str | None = None) -> list[str]:
     """The requirement IDs a block of prose cites, in order.
 
@@ -127,8 +128,10 @@ def cited_ids(text: str, known: SpecIndex, rel: str | None = None) -> list[str]:
     for m in CITE_CODE.finditer(text):
         if r := known.find(m.group(1), rel):
             out.append(r.id)
-    written = [m.group(1).strip()[2:] for m in WIKI.finditer(text) if m.group(1).strip().startswith("r:")]
-    for rid in written + CITE_LINK.findall(text):
+    # `[[r:id]]` or a link, in backticks, is an example of one, not a citation
+    bare = re.sub(r"(`+)(?:(?!\1).)+\1", "", text)
+    written = [m.group(1).strip()[2:] for m in WIKI.finditer(bare) if m.group(1).strip().startswith("r:")]
+    for rid in written + CITE_LINK.findall(bare):
         r = known.find(rid, rel)
         out.append(r.id if r else rid)
     return list(dict.fromkeys(out))
@@ -138,6 +141,8 @@ def review_key(rel: str) -> str:
     return f"spec:{rel}"
 
 
+# r[impl spec.view]
+# r[impl spec.drift]
 def view(ctx: Context, rel: str, text: str | None = None) -> SpecView:
     walk = Walk(ctx, rel, text)
     known = ctx.spec
@@ -166,6 +171,7 @@ def view(ctx: Context, rel: str, text: str | None = None) -> SpecView:
     return SpecView(rel=rel, defined=defined, citations=citations)
 
 
+# r[impl spec.drift]
 def reconcile(ctx: Context, rel: str, rid: str | None = None) -> list[str]:
     """Record the prose citing a requirement, and the requirement, as they stand.
 

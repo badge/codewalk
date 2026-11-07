@@ -486,3 +486,9 @@ pre.diff.plan { border-top: 1px dashed var(--ok); }
 /* Names in the code go to what they name */
 .lc :is(.n, .nf, .nc, .nn, .nx, .nd, .ne, .fm) { cursor: pointer; }
 .lc :is(.n, .nf, .nc, .nn, .nx, .nd, .ne, .fm):hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 2px; }
+
+/* Editing in a narrow window, the preview needs all its width: the margin goes */
+@media (max-width: 1400px) {
+  .preview .prose.spec { grid-template-columns: minmax(0, 1fr); }
+  .preview .prose.spec .margin { display: none; }
+}

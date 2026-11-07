@@ -50,11 +50,12 @@ from mdit_py_plugins.anchors import anchors_plugin
 from mdit_py_plugins.front_matter import front_matter_plugin
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-from .config import Config
-from .index import CodeIndex, Requirement, SpecIndex, Symbol, narrow
-from .notes import Thread, threads
-from .review import ReviewState
-from .terms import Definition, Glossary
+from codewalk.code.index import CodeIndex, Symbol, narrow
+from codewalk.config import Config
+from codewalk.spec.requirements import Requirement, SpecIndex
+from codewalk.spec.terms import Definition, Glossary
+from codewalk.walk.notes import Thread, threads
+from codewalk.walk.review import ReviewState
 
 WIKI = re.compile(r"\[\[([^\[\]|]+?)(?:\|([^\[\]]+?))?\]\]")
 
@@ -78,6 +79,9 @@ class FrontMatter(BaseModel):
     related: list[str] = []
     # What kind of walkthrough: "prd" for one that proposes a change to be made
     kind: str | None = None
+    # Where it goes among the others in its folder: lighter first, then those without one,
+    # by title
+    weight: int | None = None
 
     @field_validator("tags", "related", mode="before")
     @classmethod
@@ -158,6 +162,7 @@ class Problem(BaseModel):
     candidates: list[str] = []
 
 
+# r[impl ref.forms]
 def embed_line(line: str) -> tuple[str, str | None, bool] | None:
     """One line of a `walk` block, parsed.
 
@@ -204,6 +209,7 @@ def markdown() -> MarkdownIt:
     return md
 
 
+# r[impl walk.what]
 def might_be_walkthrough(text: str) -> bool:
     return "```walk" in text or "[[" in text or any(f"]({s}:" in text for s in ("walk", "req", "term", "fact"))
 
@@ -249,6 +255,7 @@ class Context:
     def spec_paths(self) -> list[str]:
         return sorted({str(p.relative_to(self.root)) for g in self.spec.globs for p in self.root.glob(g) if p.is_file()})
 
+    # r[impl walk.what]
     def walkthroughs(self) -> list[str]:
         """Markdown files under the docs globs that make at least one reference.
 
@@ -296,6 +303,7 @@ class Walk:
 
     # ---- Parsing --------------------------------------------------------------------
 
+    # r[impl ref.focus]
     def _resolve(self, ref: Ref) -> Ref:
         if ref.target.startswith(("t:", "f:")):
             ref.kind = "term"
@@ -314,6 +322,7 @@ class Walk:
                 ref.symbol = part
         return ref
 
+    # r[impl check.links]
     def _link(self, href: str) -> None:
         if re.match(r"^[a-z]+:", href) or href.startswith("#"):
             return
@@ -324,6 +333,8 @@ class Walk:
         if target not in self.links and target != self.rel:
             self.links.append(target)
 
+    # r[impl ref.forms]
+    # r[impl term.cite]
     def _collect(self) -> None:
         for tok in self.tokens:
             if tok.type == "front_matter":
@@ -361,6 +372,7 @@ class Walk:
         for rel in self.meta.related:
             self._link(rel)
 
+    # r[impl proposal.draft]
     def _proposal(self, tok) -> Ref:
         """A `walk proposed` block: the name on its first line, the draft after it."""
         lines = tok.content.rstrip("\n").split("\n")
@@ -377,6 +389,7 @@ class Walk:
         )
         return self._resolve(ref)
 
+    # r[impl proposal.settle]
     def _settled(self, tok) -> Ref | None:
         """A `walk settled` block: a proposal that's been written.
 
@@ -411,6 +424,7 @@ class Walk:
         )
         return self._resolve(ref)
 
+    # r[impl proposal.progress]
     def progress(self) -> Progress:
         """How far the code it proposes has got: proposed, written, settled."""
         proposals = [r for r in self.refs if r.kind == "proposal"]
@@ -476,6 +490,11 @@ class Walk:
 
     # ---- Checking -------------------------------------------------------------------
 
+    # r[impl check.broken]
+    # r[impl check.links]
+    # r[impl check.strict]
+    # r[impl proposal.pending]
+    # r[impl term.errors]
     def problems(self) -> list[Problem]:
         out = []
         if self.meta_error:
@@ -554,6 +573,7 @@ class Walk:
 
     # ---- Exporting to plain Markdown -------------------------------------------------------
 
+    # r[impl export.plain]
     def export(self, out_rel: str) -> str:
         """The walkthrough as plain Markdown, for anywhere that won't run this.
 
@@ -649,6 +669,7 @@ class Walk:
         return header + "\n".join(out_lines)
 
 
+# r[impl proposal.settle]
 def settle(text: str, line: int, target: str) -> str:
     """`text` with the `walk proposed` block whose name is on `line` settled.
 

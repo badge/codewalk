@@ -9,7 +9,7 @@ specs (
         impls (
             {
                 name python
-                include (codewalk/**/*.py)
+                include (codewalk/**/*.py codewalk/web/static/*.js)
                 test_include (tests/**/*.py)
             }
         )

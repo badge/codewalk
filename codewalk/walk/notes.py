@@ -70,6 +70,8 @@ class Note(BaseModel):
             yield from r.walk()
 
 
+# r[impl note.open]
+# r[impl note.replies]
 def _unsettled(notes: list[Note], kind: str) -> list[Note]:
     """The notes of `kind` (questions or requests) nothing has settled yet, at any depth.
 
@@ -131,6 +133,7 @@ class Thread(BaseModel):
         return next((n for n in self.all() if n.line == line), None)
 
 
+# r[impl note.syntax]
 def threads(tokens: list[Token]) -> list[tuple[int, int, Thread]]:
     """Every thread in a parsed walkthrough.
 
@@ -200,6 +203,8 @@ def blocks(tokens: list[Token], start: int, close: int) -> list[tuple[int, int]]
     return out
 
 
+# r[impl note.syntax]
+# r[impl note.replies]
 def parse_notes(tokens: list[Token], start: int, close: int, depth: int) -> list[Note] | None:
     """The notes in the blockquote from `start` to `close`, or None if it isn't a thread
     (an ordinary quote, whose first paragraph has no kind)."""
@@ -266,6 +271,7 @@ def ask(text: str, after_line: int, author: str | None, body: str) -> str:
     return "\n".join(lines[:at] + block + lines[at:])
 
 
+# r[impl note.ask-here]
 def ask_about(text: str, line: int, author: str | None, body: str) -> str:
     """`text` with a new question about the reference on line `line` of a `walk` block.
 
@@ -360,6 +366,7 @@ def _sentence(text: str, limit: int = 160) -> str:
     return first if len(first) <= limit else first[: limit - 1].rstrip() + "…"
 
 
+# r[impl note.resolve]
 def compact(thread: Thread, date: str, about: list[str] | None = None) -> str:
     """A settled thread as one changelog line: what was asked, and how it was settled.
 
@@ -398,6 +405,8 @@ def compact(thread: Thread, date: str, about: list[str] | None = None) -> str:
     return line
 
 
+# r[impl note.resolve]
+# r[impl note.resolve-open]
 def resolve(text: str, thread: Thread, mode: Literal["changelog", "remove"], date: str, about: list[str] | None = None) -> str:
     """`text` with a settled thread taken out: compacted into the changelog, or removed.
 

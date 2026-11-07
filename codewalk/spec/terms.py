@@ -73,6 +73,8 @@ class Glossary:
         self._pattern: re.Pattern | None = None
         self.refresh()
 
+    # r[impl term.define]
+    # r[impl term.errors]
     def refresh(self) -> bool:
         paths = sorted({p for g in self.globs for p in self.root.glob(g) if p.is_file() and p.suffix == ".md"})
         mtimes = {str(p.relative_to(self.root)): p.stat().st_mtime for p in paths}

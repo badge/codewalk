@@ -20,15 +20,16 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from markdown_it import MarkdownIt
 from markupsafe import Markup
 
-from . import tracey
-from .doc import Ref, Walk, embed_line
-from .highlight import highlight_lines, highlight_text
-from .index import Requirement, Symbol
-from .notes import KINDS, blocks, parse_notes, threads
-from .review import diff
-from .terms import DEF_LINE, Definition
+from codewalk.code.highlight import highlight_lines, highlight_text
+from codewalk.code.index import Symbol
+from codewalk.spec import tracey
+from codewalk.spec.requirements import Requirement
+from codewalk.spec.terms import DEF_LINE, Definition
+from codewalk.walk.doc import Ref, Walk, embed_line
+from codewalk.walk.notes import KINDS, blocks, parse_notes, threads
+from codewalk.walk.review import diff
 
-templates = Environment(loader=PackageLoader("codewalk"), autoescape=select_autoescape(), trim_blocks=True, lstrip_blocks=True)
+templates = Environment(loader=PackageLoader("codewalk.web"), autoescape=select_autoescape(), trim_blocks=True, lstrip_blocks=True)
 
 
 def inline_md(text: str) -> Markup:
@@ -345,6 +346,7 @@ class Renderer:
             kind="term" if kind == "t" else "fact", id=did, d=d, slug=_slug(did), line=env["line"], body=Markup(body)
         )
 
+    # r[impl term.cite]
     def text(self, tokens, idx, options, env) -> str:
         """Plain text, with the first mention of each term in a paragraph linked to it."""
         content = html.escape(tokens[idx].content)
@@ -418,6 +420,9 @@ class Renderer:
 
     # ---- Embedded symbols ----------------------------------------------------------------
 
+    # r[impl embed.current]
+    # r[impl ref.sig]
+    # r[impl review.changed]
     def embed(self, ref: Ref) -> str:
         if ref.requirement:
             return self.requirement(ref, ref.requirement)
@@ -492,6 +497,7 @@ class Renderer:
                     parts.append(self.embed(ref))
         return f'<div class="walk-group" data-md="{line}" data-md-end="{end}">' + "\n".join(parts) + "</div>\n"
 
+    # r[impl embed.inline]
     def inline_ref(self, target: str, label: str | None, line: int) -> str:
         proposed = target.startswith("?")
         target = target.lstrip("?")

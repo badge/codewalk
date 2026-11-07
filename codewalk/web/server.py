@@ -27,11 +27,12 @@ from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, S
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import notes, spec, trail
-from .doc import Context, Walk, settle
-from .highlight import highlight_lines
-from .library import Library
-from .render import _slug, diff_rows, page_data_json, render, requirement_html, templates
+from codewalk.code.highlight import highlight_lines
+from codewalk.spec import prose, trail
+from codewalk.walk import notes
+from codewalk.walk.doc import Context, Walk, settle
+from codewalk.walk.library import Library
+from codewalk.web.render import _slug, diff_rows, page_data_json, render, requirement_html, templates
 
 STATES = {
     "never": ("not reconciled", "No one has said this and its prose agree yet"),
@@ -68,6 +69,9 @@ class App:
         self.ctx = ctx
         self.lock = threading.Lock()
         self.subscribers: set[asyncio.Queue[Change]] = set()
+        # Set when the server's asked to stop, so the pages' event streams end: the server
+        # waits for every connection to close before it stops, and they'd never close
+        self.closing = False
 
     # ---- Pages ----------------------------------------------------------------------
 
@@ -95,6 +99,7 @@ class App:
         "cites": "cited here",
     }
 
+    # r[impl spec.trail]
     def walk_body(self, rel: str, text: str | None = None) -> tuple[str, dict, Walk]:
         """A walkthrough, with the requirements each block has in its margin.
 
@@ -119,7 +124,7 @@ class App:
         """
         w = Walk(self.ctx, rel, text)
         body, data = render(w)
-        views: dict[str, spec.SpecView] = {}
+        views: dict[str, prose.SpecView] = {}
         groups: dict[int, list[dict]] = {}
         for link in trail.links(w):
             req = self.ctx.spec.requirements.get(link.id)
@@ -162,7 +167,8 @@ class App:
     def is_spec(self, rel: str) -> bool:
         return rel in self.ctx.spec_paths()
 
-    def spec_body(self, rel: str, text: str | None = None) -> tuple[str, dict, spec.SpecView, Walk]:
+    # r[impl spec.view]
+    def spec_body(self, rel: str, text: str | None = None) -> tuple[str, dict, prose.SpecView, Walk]:
         """A spec file's document and margin, as HTML, with its page data.
 
         Parameters
@@ -178,14 +184,14 @@ class App:
             The document and its margin.
         data : dict
             The page's data.
-        view : spec.SpecView
+        view : prose.SpecView
             Its requirements against its prose.
         walk : Walk
             The file, parsed.
         """
         w = Walk(self.ctx, rel, text)
         body, data = render(w, spec_mode=True)
-        v = spec.view(self.ctx, rel, text)
+        v = prose.view(self.ctx, rel, text)
         used = trail.uses(self.ctx)
         groups: dict[int, list[dict]] = {}
         for c in sorted(v.citations, key=lambda c: c.lines[0]):
@@ -195,7 +201,7 @@ class App:
             if req:
                 card["href"] = f"#r-{_slug(c.id)}" if req.file == rel else f"/spec/{req.file}#r-{_slug(c.id)}"
                 card["text"] = requirement_html(req.text)
-                key = spec.review_key(rel)
+                key = prose.review_key(rel)
                 if c.state in ("prose", "both") and (was := self.ctx.review.get(key, f"{c.id}#prose")):
                     card["diff"], card["diff_label"] = diff_rows(was.text, c.prose), "What changed in the prose"
                 elif c.state == "spec" and (was := self.ctx.review.get(key, f"{c.id}#spec")):
@@ -218,7 +224,7 @@ class App:
 
     def reconcile(self, rel: str, rid: str | None) -> dict:
         self.writable(rel)
-        return {"reconciled": spec.reconcile(self.ctx, rel, rid)}
+        return {"reconciled": prose.reconcile(self.ctx, rel, rid)}
 
     def edit_page(self, rel: str) -> str:
         self.writable(rel)
@@ -331,6 +337,7 @@ class App:
         body, data, w = self.walk_body(rel, text)
         return {"html": body, "data": data, "problems": [p.model_dump() for p in w.problems()], "headings": w.headings(), "title": w.title}
 
+    # r[impl serve.local]
     def writable(self, rel: str) -> Path:
         """`rel`, if it's a Markdown file under the docs folders: nothing else is written.
 
@@ -359,6 +366,7 @@ class App:
         path.write_text(text)
         return {"saved": True}
 
+    # r[impl note.write]
     def note(
         self,
         rel: str,
@@ -449,6 +457,7 @@ class App:
         path.write_text(settle(w.text, line, ref.target))
         return {"settled": ref.target}
 
+    # r[impl review.people]
     def review(self, rel: str, ref: str | None) -> dict:
         w = Walk(self.ctx, rel)
         files = self.ctx.index.files
@@ -483,6 +492,7 @@ class App:
         # Drop any folder inside another
         return sorted(d for d in dirs if not any(o != d and o in d.parents for o in dirs))
 
+    # r[impl serve.live]
     def changed(self, paths: set[str]) -> Change | None:
         """What a batch of changed files means for the pages.
 
@@ -602,12 +612,16 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
         async def stream():
             try:
                 yield ": connected\n\n"
-                while not await request.is_disconnected():
+                quiet = 0
+                while not app.closing and not await request.is_disconnected():
                     try:
-                        change = await asyncio.wait_for(q.get(), timeout=15)
+                        change = await asyncio.wait_for(q.get(), timeout=1)
+                        quiet = 0
                         yield f"data: {change.model_dump_json()}\n\n"
                     except TimeoutError:
-                        yield ": ping\n\n"
+                        quiet += 1
+                        if quiet % 15 == 0:
+                            yield ": ping\n\n"
             finally:
                 app.subscribers.discard(q)
 
@@ -659,5 +673,22 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
     return starlette
 
 
+class _Server(uvicorn.Server):
+    """uvicorn's server, which tells the pages' event streams to end when it's asked to stop."""
+
+    def __init__(self, config: uvicorn.Config, app: App):
+        super().__init__(config)
+        self.codewalk = app
+
+    def handle_exit(self, sig, frame) -> None:
+        self.codewalk.closing = True
+        super().handle_exit(sig, frame)
+
+
+# r[impl serve.local]
+# r[impl serve.stop]
 def serve(ctx: Context, port: int) -> None:
-    uvicorn.run(make_app(ctx), host="127.0.0.1", port=port, log_level="warning")
+    starlette = make_app(ctx)
+    # However the streams behave, don't wait more than a moment for them
+    config = uvicorn.Config(starlette, host="127.0.0.1", port=port, log_level="warning", timeout_graceful_shutdown=2)
+    _Server(config, starlette.state.app).run()

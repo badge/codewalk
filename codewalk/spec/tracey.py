@@ -18,7 +18,7 @@ FILE = Path(".config/tracey/config.styx")
 # spec writes its requirements with a prefix other than `r`
 ID = r"[a-z0-9][a-z0-9.\-]*"
 QUALIFIED = rf"(?:[a-z][a-z0-9]*:)?{ID}"
-# A requirement's marker in code, `r[impl id]` or `v1[verify id]`
+# A requirement's marker in code: a prefix, then `[impl id]` or `[verify id]`
 MARKER = re.compile(rf"\b([a-z][a-z0-9]*)\[(impl|verify)\s+({ID})\]")
 # `t` and `f` are the glossary's
 RESERVED = {"t", "f"}
@@ -34,6 +34,7 @@ def key(prefix: str, rid: str) -> str:
     return rid if prefix == "r" else f"{prefix}:{rid}"
 
 
+# r[impl spec.files]
 def load(root: Path) -> list[Spec]:
     """The specs tracey's config names, each with the globs of its Markdown.
 

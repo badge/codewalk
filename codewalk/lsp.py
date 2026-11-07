@@ -26,9 +26,9 @@ from urllib.parse import unquote, urlparse
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
-from .config import Config, repo_root
-from .doc import WIKI, Context, Walk, embed_line
-from .server import App
+from codewalk.config import Config, repo_root
+from codewalk.walk.doc import WIKI, Context, Walk, embed_line
+from codewalk.web.server import App
 
 # A reference on a line, and where: (target, start column, end column)
 Span = tuple[str, int, int]

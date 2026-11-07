@@ -106,6 +106,7 @@
   // Pygments' classes for names: plain, functions, classes, namespaces, others, decorators
   const NAME = /^(n|nf|nc|nn|nx|nd|ne|fm)$/;
 
+  // r[impl ui.context]
   async function openContext({ file, start, end, line, focusRef }) {
     if (!panel) return;
     hideCard();
@@ -425,6 +426,7 @@
     const el = $$("#prose [data-md]").find((el) => el.getBoundingClientRect().bottom > top);
     return el ? +el.dataset.md : 1;
   }
+  // r[impl ui.place]
   function here(view) { return `/${view}/${data.doc}?line=${topLine()}`; }
   // The rendered block a line of Markdown is in: the last one starting at or before it
   function blockAt(line) {
@@ -617,6 +619,7 @@
     if (on) sync.fromSource();
   }
 
+  // r[impl ui.edit-panes]
   const sync = (() => {
     let lineTops = [], pairs = null, driver = null, release;
     const mirror = document.createElement("div");

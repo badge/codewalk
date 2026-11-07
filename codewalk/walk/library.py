@@ -14,14 +14,16 @@ from pathlib import PurePosixPath
 
 from pydantic import BaseModel
 
-from . import spec
-from .doc import Context, Walk
+from codewalk.spec import prose
+from codewalk.walk.doc import Context, Walk
 
 
 class Summary(BaseModel):
     """One walkthrough, as the index shows it."""
 
     rel: str
+    # From its front matter: where it goes in its folder
+    weight: int | None = None
     title: str
     summary: str | None
     tags: list[str]
@@ -61,6 +63,7 @@ class SpecSummary(BaseModel):
     """A spec file, as the index shows it: its requirements against its prose."""
 
     rel: str
+    weight: int | None = None
     title: str
     requirements: int
     # Requirements here that its prose cites, and that it doesn't
@@ -69,6 +72,12 @@ class SpecSummary(BaseModel):
     # Citations in its prose of requirements not written yet
     missing: int
     drifted: int
+
+
+# r[impl ui.weight]
+def by_weight(s: Summary | SpecSummary) -> tuple:
+    """Where a walkthrough or spec goes in its folder: lighter first, then the rest, by title."""
+    return (s.weight is None, s.weight or 0, s.title.lower())
 
 
 class Library(BaseModel):
@@ -86,6 +95,7 @@ class Library(BaseModel):
             reviewed, embedded = w.reviewed_count()
             out[rel] = Summary(
                 rel=rel,
+                weight=w.meta.weight,
                 title=w.title,
                 summary=w.summary,
                 tags=sorted(set(w.meta.tags)),
@@ -104,12 +114,13 @@ class Library(BaseModel):
                 out[target].linked_from.append(s.rel)
         specs = []
         for rel in ctx.spec_paths():
-            v = spec.view(ctx, rel)
+            v = prose.view(ctx, rel)
             uncited = len(v.uncited)
             specs.append(
                 SpecSummary(
                     rel=rel,
-                    title=Walk(ctx, rel).title,
+                    weight=(sw := Walk(ctx, rel)).meta.weight,
+                    title=sw.title,
                     requirements=len(v.defined),
                     cited=len(v.defined) - uncited,
                     uncited=uncited,
@@ -137,7 +148,9 @@ class Library(BaseModel):
         return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
 
     def folders(self) -> list[tuple[str, list[Summary]]]:
-        """The walkthroughs grouped by folder, folders in order, each sorted by title.
+        """The walkthroughs grouped by folder, folders in order, each in order of weight.
+
+        Lighter first; those without a weight after, by title.
 
         Returns
         -------
@@ -147,8 +160,9 @@ class Library(BaseModel):
         groups: dict[str, list[Summary]] = {}
         for s in self.walkthroughs:
             groups.setdefault(s.folder, []).append(s)
-        return [(f, sorted(g, key=lambda s: s.title.lower())) for f, g in sorted(groups.items())]
+        return [(f, sorted(g, key=by_weight)) for f, g in sorted(groups.items())]
 
+    # r[impl ui.index]
     def spec_tree(self) -> list[tuple[int, str | None, SpecSummary | None]]:
         """The specs as a tree of folders, for the index: each folder, then what's in it.
 
@@ -158,7 +172,9 @@ class Library(BaseModel):
             Each row's depth, and either a folder's name (from the one above it) or a spec.
         """
         # A folder's own files before the folders in it
-        paths = sorted(self.specs, key=lambda s: [*s.rel.split("/")[:-1], "\0" + s.rel.split("/")[-1]])
+        # In order of weight within a folder; its own files before the folders in it
+        paths = sorted(self.specs, key=lambda s: (s.rel.split("/")[:-1], by_weight(s)))
+        paths = sorted(paths, key=lambda s: [*s.rel.split("/")[:-1], "\0"])
         dirs = [s.rel.split("/")[:-1] for s in paths]
         # The folders every spec is in aren't worth a row each
         common = 0

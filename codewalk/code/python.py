@@ -17,8 +17,8 @@ from pathlib import Path
 import tree_sitter_python
 from tree_sitter import Language, Node, Parser
 
-from . import tracey
-from .index import MARKER, Symbol
+from codewalk.code.index import MARKER, Symbol
+from codewalk.spec import tracey
 
 PYTHON = Language(tree_sitter_python.language())
 
@@ -27,6 +27,7 @@ def parser() -> Parser:
     return Parser(PYTHON)
 
 
+# r[impl index.python-path]
 def module_path(rel: str, root: Path | None = None) -> list[str]:
     """A file's dotted module name, as `::` segments.
 
@@ -115,6 +116,7 @@ def _head(definition: Node) -> int:
     return end
 
 
+# r[impl ref.sig]
 def _outline(outer: Node, inner: Node, start: int) -> list[tuple[int, int]]:
     """What `sig` shows of a definition: its header and docstring and, for a class, its
     fields and its `__init__`'s header and docstring.
@@ -160,6 +162,8 @@ def _outline(outer: Node, inner: Node, start: int) -> list[tuple[int, int]]:
     return out
 
 
+# r[impl index.languages]
+# r[impl index.start]
 def index_file(rel: str, source: bytes, parser: Parser, root: Path | None = None) -> list[Symbol]:
     tree = parser.parse(source)
     out: list[Symbol] = []

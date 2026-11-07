@@ -21,10 +21,11 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from . import spec, tracey
-from .doc import Context, Walk
+# A marker in a comment, not one written about in a docstring
+from codewalk.code.index import MARKER
+from codewalk.spec import prose, tracey
+from codewalk.walk.doc import Context, Walk
 
-MARKER = tracey.MARKER
 Role = Literal["proposes", "proposes a test of", "implements", "verifies", "cites"]
 
 
@@ -37,6 +38,7 @@ class Link(BaseModel):
     line: int
 
 
+# r[impl spec.trail]
 def links(walk: Walk) -> list[Link]:
     """Every requirement each block of a walkthrough proposes, implements, verifies or cites.
 
@@ -76,8 +78,8 @@ def links(walk: Walk) -> list[Link]:
                 out.append(Link(id=rid, role="implements" if kind == "impl" else "verifies", line=at))
         elif ref.kind == "embed" and ref.requirement:
             out.append(Link(id=ref.requirement.id, role="cites", line=at))
-    for line, _, block in spec._blocks(walk):
-        for rid in spec.cited_ids(block, known, walk.rel):
+    for line, _, block in prose._blocks(walk):
+        for rid in prose.cited_ids(block, known, walk.rel):
             out.append(Link(id=rid, role="cites", line=line))
     seen, unique = set(), []
     for link in out:
@@ -97,12 +99,13 @@ class Origin(BaseModel):
     line: int | None = None
 
 
-def origin(ctx: Context, rid: str, views: dict[str, spec.SpecView]) -> Origin | None:
+# r[impl spec.trail]
+def origin(ctx: Context, rid: str, views: dict[str, prose.SpecView]) -> Origin | None:
     req = ctx.spec.requirements.get(rid)
     if req is None:
         return None
     if req.file not in views:
-        views[req.file] = spec.view(ctx, req.file)
+        views[req.file] = prose.view(ctx, req.file)
     cite = next((c for c in views[req.file].citations if c.id == rid), None)
     if cite is None:
         return Origin(file=req.file)

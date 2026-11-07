@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 from codewalk.config import Config
-from codewalk.doc import Context, Walk, embed_line
-from codewalk.render import render
-from codewalk.review import ReviewState
+from codewalk.walk.doc import Context, Walk, embed_line
+from codewalk.walk.review import ReviewState
+from codewalk.web.render import render
 
 LIB = """\
 //! A tiny crate.
@@ -84,6 +84,7 @@ def walk(repo: Path, text: str) -> Walk:
 # ---- The index ------------------------------------------------------------------------
 
 
+# r[verify ref.tail]
 def test_a_tail_of_the_qualified_name_resolves_when_it_names_one_symbol(repo):
     index = ctx(repo).index
     sym, _ = index.resolve("MARGIN")
@@ -92,18 +93,21 @@ def test_a_tail_of_the_qualified_name_resolves_when_it_names_one_symbol(repo):
     assert sym and sym.qualified.endswith("other::Battery::command")
 
 
+# r[verify ref.ambiguous]
 def test_a_name_shared_by_several_symbols_is_ambiguous_with_each_as_a_candidate(repo):
     sym, candidates = ctx(repo).index.resolve("Battery::command")
     assert sym is None
     assert len(candidates) == 2
 
 
+# r[verify ref.nearest]
 def test_a_name_that_matches_nothing_suggests_the_nearest(repo):
     sym, candidates = ctx(repo).index.resolve("comand")
     assert sym is None
     assert any(c.name == "command" for c in candidates)
 
 
+# r[verify index.start]
 def test_a_symbol_starts_at_its_doc_comments_and_markers(repo):
     sym, _ = ctx(repo).index.resolve("MARGIN")
     assert (sym.start, sym.line, sym.end) == (3, 5, 5)
@@ -111,6 +115,7 @@ def test_a_symbol_starts_at_its_doc_comments_and_markers(repo):
     assert sym.markers == [("impl", "hold.margin")]
 
 
+# r[verify index.languages]
 def test_an_impl_block_is_named_by_impl_and_its_type(repo):
     index = ctx(repo).index
     sym, candidates = index.resolve("impl Battery")
@@ -126,6 +131,7 @@ def test_a_member_keeps_its_owner_in_its_shortest_name(repo):
     assert index.shortest_unique(sym) == "Battery::power"
 
 
+# r[verify ref.crate]
 def test_crate_anchors_a_reference_at_the_root(repo):
     index = ctx(repo).index
     sym, _ = index.resolve("crate::Battery::command")
@@ -149,6 +155,7 @@ def test_search_matches_words_in_any_order(repo):
 # ---- Walkthroughs -----------------------------------------------------------------------
 
 
+# r[verify ref.forms]
 def test_a_walk_block_line_is_a_reference_with_an_optional_focus_and_sig():
     assert embed_line("  Battery::command > 0 => sig") == ("Battery::command", "0 =>", True)
     assert embed_line("impl Battery") == ("impl Battery", None, False)
@@ -156,6 +163,7 @@ def test_a_walk_block_line_is_a_reference_with_an_optional_focus_and_sig():
     assert embed_line("   ") is None
 
 
+# r[verify ref.forms]
 def test_every_kind_of_reference_is_found_and_resolved(repo):
     w = walk(
         repo,
@@ -178,6 +186,7 @@ def test_every_kind_of_reference_is_found_and_resolved(repo):
     assert w.problems() == []
 
 
+# r[verify check.broken]
 def test_broken_references_are_errors_on_their_lines(repo):
     w = walk(
         repo,
@@ -197,6 +206,7 @@ def test_broken_references_are_errors_on_their_lines(repo):
     assert all(p.severity == "error" for p in w.problems())
 
 
+# r[verify ref.focus]
 def test_a_focus_shows_only_the_block_its_line_opens(repo):
     w = walk(
         repo,
@@ -214,6 +224,7 @@ def test_a_focus_shows_only_the_block_its_line_opens(repo):
     assert len(lines) == 4
 
 
+# r[verify ref.focus]
 def test_a_focus_that_matches_no_line_is_an_error(repo):
     w = walk(
         repo,
@@ -227,6 +238,8 @@ def test_a_focus_that_matches_no_line_is_an_error(repo):
     assert problem.severity == "error" and "nowhere" in problem.message
 
 
+# r[verify embed.current]
+# r[verify embed.inline]
 def test_the_rendered_page_links_symbols_and_requirements(repo):
     w = walk(
         repo,
@@ -251,6 +264,8 @@ def test_the_rendered_page_links_symbols_and_requirements(repo):
 # ---- Review -----------------------------------------------------------------------------
 
 
+# r[verify review.changed]
+# r[verify check.strict]
 def test_code_changed_since_review_is_a_warning_with_a_diff(repo):
     text = """\
     ```walk
@@ -271,6 +286,7 @@ def test_code_changed_since_review_is_a_warning_with_a_diff(repo):
     assert '<span class="drow del">' in body and '<span class="drow add">' in body
 
 
+# r[verify review.record]
 def test_review_state_is_kept_in_one_file_at_the_root(repo):
     state = ReviewState(repo)
     state.mark("docs/walk.md", "MARGIN", "abc", "text")
@@ -283,6 +299,7 @@ def test_review_state_is_kept_in_one_file_at_the_root(repo):
 # ---- Export -----------------------------------------------------------------------------
 
 
+# r[verify export.plain]
 def test_export_writes_plain_markdown_with_the_code_and_links(repo):
     w = walk(
         repo,
@@ -348,6 +365,8 @@ def pyctx(repo: Path) -> Context:
     return Context(repo, Config(sources=["src/**/*.rs", "pkg/**/*.py"]))
 
 
+# r[verify index.python-path]
+# r[verify index.languages]
 def test_python_symbols_are_named_from_their_package(pyrepo):
     index = pyctx(pyrepo).index
     names = {s.qualified: s.kind for s in index.symbols if s.file.endswith(".py")}
@@ -361,6 +380,7 @@ def test_python_symbols_are_named_from_their_package(pyrepo):
     }
 
 
+# r[verify index.start]
 def test_a_python_symbol_takes_in_its_decorators_comments_and_markers(pyrepo):
     index = pyctx(pyrepo).index
     full, _ = index.resolve("Store::full")
@@ -420,7 +440,7 @@ def test_front_matter_that_isnt_valid_is_an_error(repo):
 
 
 def test_walkthroughs_relate_by_linking_to_each_other(repo):
-    from codewalk.library import Library
+    from codewalk.walk.library import Library
 
     (repo / "docs/a.md").write_text("---\ntags: [x, y]\n---\n# A\n\n[[MARGIN]], then [B](b.md#start).\n")
     (repo / "docs/b.md").write_text("---\ntags: [y]\nrelated: [sub/c.md]\n---\n# B\n\n[[MARGIN]]\n")
@@ -437,6 +457,7 @@ def test_walkthroughs_relate_by_linking_to_each_other(repo):
     assert [f for f, _ in library.folders()] == ["docs", "docs/sub"]
 
 
+# r[verify check.links]
 def test_a_link_to_a_markdown_file_that_doesnt_exist_is_an_error(repo):
     w = walk(repo, "# Walk\n\n[[MARGIN]] and [gone](gone.md).\n")
     (problem,) = w.problems()
@@ -470,7 +491,7 @@ def test_the_config_rejects_keys_it_doesnt_know(tmp_path):
 def client(repo):
     from starlette.testclient import TestClient
 
-    from codewalk.server import make_app
+    from codewalk.web.server import make_app
 
     (repo / "docs/walk.md").write_text("---\ntags: [t]\n---\n# Walk\n\n```walk\nMARGIN\n```\n")
     with TestClient(make_app(ctx(repo), watch=False)) as c:
@@ -485,6 +506,7 @@ def test_the_pages_render(client):
     assert client.get("/edit/docs/walk.md").status_code == 200
 
 
+# r[verify serve.local]
 def test_only_walkthroughs_can_be_edited_or_saved(client, repo):
     assert client.get("/edit/src/lib.rs").status_code == 403
     assert client.post("/api/save", json={"path": "src/lib.rs", "text": "oops"}).status_code == 403
@@ -493,6 +515,7 @@ def test_only_walkthroughs_can_be_edited_or_saved(client, repo):
     assert (repo / "docs/walk.md").read_text() == "# New\n"
 
 
+# r[verify review.record]
 def test_reviewing_through_the_api_records_the_code(client, repo):
     assert client.post("/api/review", json={"path": "docs/walk.md"}).json() == {"reviewed": ["MARGIN"]}
     assert "MARGIN" in json.loads((repo / "codewalk.review.json").read_text())["docs/walk.md"]
@@ -524,6 +547,8 @@ pub fn rest(&mut self) {
 """
 
 
+# r[verify proposal.draft]
+# r[verify proposal.pending]
 def test_a_proposal_for_a_name_not_written_yet_is_in_hand_not_broken(repo):
     w = walk(repo, PROPOSAL)
     kinds = sorted((p.severity, p.message) for p in w.problems())
@@ -534,8 +559,10 @@ def test_a_proposal_for_a_name_not_written_yet_is_in_hand_not_broken(repo):
     assert 'class="walk proposal pending"' in body and "proposed-ref" in body
 
 
+# r[verify proposal.settle]
+# r[verify proposal.progress]
 def test_once_written_a_proposal_shows_the_code_against_the_draft_and_can_be_settled(repo):
-    from codewalk.doc import settle
+    from codewalk.walk.doc import settle
 
     (repo / "src/lib.rs").write_text(
         LIB.replace("impl Battery {", "impl Battery {\n    pub fn rest(&mut self) {\n        self.power = 0;\n    }\n", 1)
@@ -556,8 +583,9 @@ def test_once_written_a_proposal_shows_the_code_against_the_draft_and_can_be_set
     assert "```rust\npub fn rest(&mut self) {" in w.export("docs/out.md")
 
 
+# r[verify note.open]
 def test_a_standing_request_is_in_hand_until_its_done(repo):
-    from codewalk.brief import brief
+    from codewalk.walk.brief import brief
 
     text = "# W\n\n> [!request] @matthew: Use NumPy-style docstrings.\n\n[[MARGIN]]\n"
     w = walk(repo, text)
@@ -599,8 +627,10 @@ Then more prose.
 """
 
 
+# r[verify note.syntax]
+# r[verify note.open]
 def test_a_thread_is_parsed_from_a_blockquote_and_is_open_until_answered(repo):
-    from codewalk import notes
+    from codewalk.walk import notes
 
     w = walk(repo, THREAD)
     (t,) = w.threads
@@ -617,19 +647,21 @@ def test_a_thread_is_parsed_from_a_blockquote_and_is_open_until_answered(repo):
 
 
 def test_asking_a_question_writes_a_new_thread_after_a_block(repo):
-    from codewalk import notes
+    from codewalk.walk import notes
 
     text = notes.ask(THREAD, 5, "matthew", "Is this used?")
     assert "```\n\n> [!question] @matthew: Is this used?\n\n> [!question]" in text
     assert len(walk(repo, text).threads) == 2
 
 
+# r[verify note.syntax]
 def test_an_ordinary_blockquote_isnt_a_thread(repo):
     assert walk(repo, "# W\n\n> Just a quote.\n\n[[MARGIN]]\n").threads == []
 
 
+# r[verify context.brief]
 def test_context_briefs_an_agent_on_whats_in_hand(repo):
-    from codewalk.brief import as_markdown, brief
+    from codewalk.walk.brief import as_markdown, brief
 
     walk(repo, THREAD + "\n```walk proposed\nBattery::rest\nfn rest() {}\n```\n")
     b = brief(ctx(repo), "docs/walk.md")
@@ -643,6 +675,7 @@ def test_context_briefs_an_agent_on_whats_in_hand(repo):
 # ---- Requirements and their code ------------------------------------------------------------
 
 
+# r[verify spec.traces]
 def test_a_requirements_markers_in_the_code_are_found_with_the_symbol_theyre_on(repo):
     traces = ctx(repo).index.traces()
     (t,) = traces["battery.command"]
@@ -674,33 +707,36 @@ A battery is told what to do.
 """
 
 
+# r[verify spec.view]
+# r[verify spec.cite]
 def test_the_spec_view_finds_what_the_prose_cites_and_what_it_doesnt(repo):
-    from codewalk import spec
+    from codewalk.spec import prose
 
     (repo / "docs/spec/spec.md").write_text(SPEC_PROSE + "\nr[battery.idle]\nAn idle battery rests.\n")
     c = ctx(repo)
-    v = spec.view(c, "docs/spec/spec.md")
+    v = prose.view(c, "docs/spec/spec.md")
     assert {x.id: x.state for x in v.citations} == {"hold.margin": "never", "battery.command": "never", "battery.rest": "missing"}
     assert [r.id for r in v.uncited] == ["battery.idle"]
     assert all(x.lines == [3] for x in v.citations if x.id != "battery.rest")
 
 
+# r[verify spec.drift]
 def test_reconciling_records_both_sides_and_a_change_to_either_shows(repo):
-    from codewalk import spec
+    from codewalk.spec import prose
 
     path = repo / "docs/spec/spec.md"
     path.write_text(SPEC_PROSE)
     c = ctx(repo)
-    assert spec.reconcile(c, "docs/spec/spec.md") == ["hold.margin", "battery.command"]
-    assert {x.id: x.state for x in spec.view(c, "docs/spec/spec.md").citations}["hold.margin"] == "ok"
+    assert prose.reconcile(c, "docs/spec/spec.md") == ["hold.margin", "battery.command"]
+    assert {x.id: x.state for x in prose.view(c, "docs/spec/spec.md").citations}["hold.margin"] == "ok"
 
     path.write_text(SPEC_PROSE.replace("We hold some back", "We always hold some back"))
     c = ctx(repo)
-    assert spec.view(c, "docs/spec/spec.md").citations[0].state == "prose"
+    assert prose.view(c, "docs/spec/spec.md").citations[0].state == "prose"
 
     path.write_text(SPEC_PROSE.replace("Hold a margin back.", "Hold a margin of 5 kW back."))
     c = ctx(repo)
-    states = {x.id: x.state for x in spec.view(c, "docs/spec/spec.md").citations}
+    states = {x.id: x.state for x in prose.view(c, "docs/spec/spec.md").citations}
     assert states["hold.margin"] == "spec" and states["battery.command"] == "ok"
 
 
@@ -732,6 +768,7 @@ Something we suppose.
 """
 
 
+# r[verify term.define]
 def test_terms_and_facts_are_defined_like_requirements(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY)
     g = ctx(repo).glossary
@@ -741,6 +778,8 @@ def test_terms_and_facts_are_defined_like_requirements(repo):
     assert g.terms["deadband"].text == "How far above its target import can rise before we act."
 
 
+# r[verify term.cite]
+# r[verify term.errors]
 def test_terms_are_cited_and_mentioned_and_unknown_ones_are_errors(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY)
     w = walk(repo, "# W\n\nThe deadband, the deadband, and [[t:deadband]] and [[f:market.periods]] and [[t:nope]].\n")
@@ -750,6 +789,7 @@ def test_terms_are_cited_and_mentioned_and_unknown_ones_are_errors(repo):
     assert 'class="term fact"' in body and set(data["terms"]) == {"t:deadband", "f:market.periods"}
 
 
+# r[verify term.errors]
 def test_a_term_defined_twice_is_an_error_where_its_defined(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY + "\nt[deadband]\nAgain.\n")
     w = Walk(ctx(repo), "docs/glossary.md")
@@ -815,8 +855,9 @@ The end.
 """
 
 
+# r[verify note.replies]
 def test_a_reply_nests_under_the_note_it_refines_and_keeps_the_thread_open(repo):
-    from codewalk import notes
+    from codewalk.walk import notes
 
     w = walk(repo, NESTED)
     (t,) = w.threads
@@ -835,8 +876,9 @@ def test_a_reply_nests_under_the_note_it_refines_and_keeps_the_thread_open(repo)
     assert body.count('class="replies"') == 2 and 'data-action="resolve" data-mode="changelog"' in body
 
 
+# r[verify note.resolve]
 def test_a_settled_thread_compacts_into_the_changelog_newest_first(repo):
-    from codewalk import notes
+    from codewalk.walk import notes
 
     w = walk(repo, NESTED)
     settled = notes.reply_to(w.text, w.threads[0].notes[1].replies[0], "answer", "claude", "Click shows them as help.")
@@ -856,8 +898,10 @@ def test_a_settled_thread_compacts_into_the_changelog_newest_first(repo):
     assert "- 2026-11-07: **question** @a: One? → **answer** @b: Yes.\n" in log
 
 
+# r[verify note.resolve]
+# r[verify note.resolve-open]
 def test_an_open_thread_cant_be_resolved_and_a_settled_one_can_be_removed(repo):
-    from codewalk import notes
+    from codewalk.walk import notes
 
     w = walk(repo, NESTED)
     with pytest.raises(ValueError):
@@ -866,6 +910,7 @@ def test_an_open_thread_cant_be_resolved_and_a_settled_one_can_be_removed(repo):
     assert notes.resolve(done, walk(repo, done).threads[0], "remove", "2026-11-06") == "# W\n\nAfter.\n"
 
 
+# r[verify note.write]
 def test_replying_to_a_note_and_resolving_work_through_the_api(client, repo):
     (repo / "docs/walk.md").write_text(NESTED)
     r = client.post("/api/note", json={"path": "docs/walk.md", "kind": "answer", "text": "Because.", "to": 9})
@@ -888,6 +933,8 @@ specs (
 """
 
 
+# r[verify spec.files]
+# r[verify spec.prefix]
 def test_a_spec_named_in_traceys_config_is_read_with_its_own_prefix(repo):
     (repo / ".config/tracey").mkdir(parents=True)
     (repo / ".config/tracey/config.styx").write_text(TRACEY)
@@ -898,13 +945,14 @@ def test_a_spec_named_in_traceys_config_is_read_with_its_own_prefix(repo):
     assert {"battery.command", "v1:battery.command"} <= set(c.spec.requirements)
     assert c.spec.find("battery.command", "docs/old/old.md").id == "v1:battery.command"
     assert c.spec.find("battery.command").id == "battery.command"
-    from codewalk import spec
+    from codewalk.spec import prose
 
-    assert [x.id for x in spec.view(c, "docs/old/old.md").citations] == ["v1:battery.command"]
+    assert [x.id for x in prose.view(c, "docs/old/old.md").citations] == ["v1:battery.command"]
 
 
+# r[verify note.ask-here]
 def test_asking_about_one_reference_of_several_splits_its_block_under_it(repo):
-    from codewalk import notes
+    from codewalk.walk import notes
 
     text = "```walk\nMARGIN\nBattery::command\n```\n"
     out = notes.ask_about(text, 2, "me", "Why five?")
@@ -913,6 +961,7 @@ def test_asking_about_one_reference_of_several_splits_its_block_under_it(repo):
     assert notes.ask_about(text, 3, "me", "Why?").startswith(text.rstrip("\n") + "\n\n> [!question]")
 
 
+# r[verify ui.context]
 def test_a_name_in_the_code_means_the_symbol_of_that_name_nearest_it(repo):
     c = ctx(repo)
     s = c.index.named_at("MARGIN", "src/lib.rs", 20)
@@ -922,10 +971,161 @@ def test_a_name_in_the_code_means_the_symbol_of_that_name_nearest_it(repo):
     assert c.index.named_at("nothing", "src/lib.rs", 1) is None
 
 
+# r[verify ui.index]
 def test_the_index_lists_specs_as_a_tree_of_folders(repo):
-    from codewalk.library import Library
+    from codewalk.walk.library import Library
 
     (repo / "docs/spec/v2").mkdir()
     (repo / "docs/spec/v2/more.md").write_text("# _More_\n\nr[more.thing]\nA thing.\n")
     rows = [(d, f or s.rel) for d, f, s in Library.of(ctx(repo)).spec_tree()]
     assert rows == [(0, "docs/spec/spec.md"), (0, "v2"), (1, "docs/spec/v2/more.md")]
+
+
+OUTLINED = '''\
+class Store:
+    """Keeps things.
+
+    Parameters
+    ----------
+    root : str
+        Where.
+    """
+
+    # How many it holds
+    size: int = 3
+
+    def __init__(self, root: str):
+        """Open it."""
+        self.root = root
+
+    def get(self, key: str) -> str:
+        """One thing."""
+        return key
+'''
+
+
+# r[verify ref.sig]
+def test_sig_shows_a_python_classs_docstring_fields_and_init_header(pyrepo):
+    (pyrepo / "pkg/outlined.py").write_text(OUTLINED)
+    c = pyctx(pyrepo)
+    s, _ = c.index.resolve("outlined::Store")
+    # The header and docstring, the field with its comment, then `__init__` to its docstring
+    assert s.outline == [(1, 8), (10, 11), (13, 14)]
+    get, _ = c.index.resolve("Store::get")
+    assert get.outline == [(get.line, get.line + 1)]
+    path = pyrepo / "docs/walk.md"
+    path.write_text("```walk\noutlined::Store sig\n```\n")
+    html, _ = render(Walk(c, "docs/walk.md"))
+    assert "Keeps things" in html and "size" in html and "__init__" in html
+    assert "One thing" not in html
+
+
+# r[verify spec.cite]
+def test_a_citation_written_in_backticks_is_an_example_not_a_citation(repo):
+    from codewalk.spec.prose import cited_ids
+
+    known = ctx(repo).spec
+    assert cited_ids("cite with `[[r:some.id]]`, like [[r:hold.margin]], or `hold.margin`", known) == ["hold.margin"]
+
+
+# r[verify walk.what]
+def test_a_walkthrough_is_markdown_in_the_docs_that_makes_a_reference_and_isnt_spec(repo):
+    (repo / "docs/plain.md").write_text("# Nothing here\n\nJust words.\n")
+    (repo / "docs/walk.md").write_text("# Walk\n\nSee [[MARGIN]].\n")
+    assert ctx(repo).walkthroughs() == ["docs/walk.md"]
+
+
+# r[verify spec.trail]
+def test_a_blocks_requirements_are_in_the_margin_linked_to_their_prose(repo):
+    from codewalk.spec import trail
+    from codewalk.web.server import App
+
+    (repo / "docs/spec/spec.md").write_text("# Spec\n\nWe hold some back (`hold.margin`).\n\n" + SPEC.split("\n", 2)[2])
+    w = walk(repo, "# W\n\n```walk\nMARGIN\n```\n")
+    assert [(link.id, link.role) for link in trail.links(w)] == [("hold.margin", "implements")]
+    html, data, _ = App(ctx(repo)).walk_body("docs/walk.md")
+    assert data["margin"] and 'data-go="/spec/docs/spec/spec.md?line=3&amp;req=hold.margin"' in html
+
+
+# r[verify serve.live]
+def test_a_change_to_a_walkthrough_or_the_code_reaches_the_pages(repo):
+    from codewalk.web.server import App
+
+    (repo / "docs/walk.md").write_text("# Walk\n\nSee [[MARGIN]].\n")
+    app = App(ctx(repo))
+    assert app.changed({str(repo / "docs/walk.md")}).docs == ["docs/walk.md"]
+    (repo / "src/lib.rs").write_text(LIB + "\npub fn more() {}\n")
+    assert app.changed({str(repo / "src/lib.rs")}).code
+
+
+# r[verify review.people]
+def test_reading_checking_and_exporting_never_mark_anything_reviewed(repo):
+    w = walk(repo, "# W\n\n```walk\nMARGIN\n```\n")
+    render(w)
+    w.problems()
+    w.export("out.md")
+    assert not (repo / "codewalk.review.json").exists()
+
+
+# r[verify context.brief]
+def test_context_takes_in_questions_asked_in_a_spec(repo, monkeypatch):
+    from click.testing import CliRunner
+
+    from codewalk.cli import main
+
+    (repo / "docs/spec/spec.md").write_text(SPEC + "\n> [!question] @matthew: Is this what we mean?\n")
+    monkeypatch.chdir(repo)
+    out = CliRunner().invoke(main, ["context"]).output
+    assert "docs/spec/spec.md" in out and "Is this what we mean?" in out
+
+
+# r[verify serve.stop]
+def test_the_server_stops_on_ctrl_c_with_a_page_open(repo):
+    import signal
+    import socket
+    import subprocess
+    import sys
+    import time
+
+    import httpx
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    (repo / "docs/walk.md").write_text("# Walk\n\nSee [[MARGIN]].\n")
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "from codewalk.cli import main; main()", "serve", "--port", str(port)],
+        cwd=repo,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        url = f"http://127.0.0.1:{port}"
+        for _ in range(100):
+            try:
+                httpx.get(url, timeout=1)
+                break
+            except httpx.TransportError:
+                time.sleep(0.1)
+        # A page open: its event stream held open, as a browser would
+        with httpx.stream("GET", f"{url}/events", timeout=10) as events:
+            next(events.iter_lines())
+            began = time.monotonic()
+            proc.send_signal(signal.SIGINT)
+            proc.wait(timeout=8)
+        assert time.monotonic() - began < 4
+    finally:
+        proc.kill()
+
+
+# r[verify ui.weight]
+def test_walkthroughs_and_specs_are_listed_in_order_of_weight(repo):
+    from codewalk.walk.library import Library
+
+    for name, front in [("b", "weight: 20"), ("a", ""), ("c", "weight: 10"), ("d", "")]:
+        (repo / f"docs/{name}.md").write_text(f"---\n{front}\n---\n# {name.upper()}\n\nSee [[MARGIN]].\n")
+    (repo / "docs/spec/first.md").write_text("---\nweight: 1\n---\n# Z first\n\nr[first.thing]\nA thing.\n")
+    lib = Library.of(ctx(repo))
+    [(_, walks)] = lib.folders()
+    assert [s.title for s in walks] == ["C", "B", "A", "D"]
+    assert [s.rel for _, _, s in lib.spec_tree() if s] == ["docs/spec/first.md", "docs/spec/spec.md"]

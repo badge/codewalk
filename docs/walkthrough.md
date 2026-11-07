@@ -1,4 +1,5 @@
 ---
+weight: 10
 summary: How codewalk turns Markdown that names code into a page that shows it, checks it and remembers what you've reviewed. A codewalk of codewalk.
 tags: [codewalk, tooling, review]
 ---
@@ -92,7 +93,7 @@ CodeIndex::refresh
 
 **Rust** is indexed by [[index::index_file]]. Its qualified names come from the module
 path, which is the file's path, as Rust has it. Impl blocks get their own entry, so a
-walkthrough can show `impl Hold` whole, and their methods are filed under the type:
+walkthrough can show `impl Thing` whole, and their methods are filed under the type:
 
 ```walk
 index::index_file::walk > elif t == "impl_item":
@@ -138,7 +139,7 @@ CodeIndex::nearest
 ```
 
 Going the other way, [[CodeIndex::shortest_unique]] gives the shortest name to write for
-a symbol. A method keeps its type, `Dispatch::on_short` rather than `on_short`, because a
+a symbol. A method keeps its type, `Walk::problems` rather than `problems`, because a
 name in a walkthrough is read by people before it's resolved by codewalk.
 
 ```walk
@@ -235,7 +236,7 @@ Renderer::render
 Each embedded symbol is drawn by [[Renderer::embed]], which cuts the symbol's lines out
 of the highlighted file, strips the indent the symbol had inside its impl or class, and
 works out the review state. The markup is a Jinja template,
-[`templates/figure.html`](../codewalk/templates/figure.html): a caption of two rows, the
+[`web/templates/figure.html`](../codewalk/web/templates/figure.html): a caption of two rows, the
 path (wrapping at each `::` rather than being cut short) with its actions, then the file
 and the review badge.
 
@@ -335,8 +336,8 @@ exports as the same part.
 Walk::export
 ```
 
-ancillaries-service's ERCOT ERS strict deep dive exports to exactly the excerpts its
-`docs/tools/build_deep_dive.py` produces, byte for byte.
+So `codewalk export docs/walkthrough.md out.md` gives this walkthrough as it would read
+anywhere codewalk isn't, with each excerpt as the code stood when it was exported.
 
 ## 10. Proposals: code not written yet
 
@@ -443,24 +444,24 @@ saying the same thing. So the prose cites the requirements it gives rise to, and
 cited_ids
 ```
 
-[[spec::view]] puts it together: the requirements the file defines, which the prose
+[[prose::view]] puts it together: the requirements the file defines, which the prose
 cites and from where, which it doesn't, citations of requirements not written yet, and
 for each, whether the prose or the requirement has changed since they were last
 reconciled. The spec page shows each cited requirement in the margin, level with the
 prose that cites it.
 
 ```walk
-spec::view
+prose::view
 ```
 
-[[spec::reconcile]] records both sides as they stand, so a later change to either shows
+[[prose::reconcile]] records both sides as they stand, so a later change to either shows
 on the other. That's codewalk's whole part in requirements: coverage and validation stay
 with tracey. Where codewalk does reach into the code, it's only to find it:
 [[CodeIndex::traces]] maps each `r[impl …]` and `r[verify …]` marker to the symbol it's
 on, so a requirement can show its code.
 
 ```walk
-spec::reconcile
+prose::reconcile
 CodeIndex::traces
 ```
 
@@ -535,8 +536,8 @@ setup::init
 ## 17. The browser side
 
 The page's behaviour is one plain script,
-[`static/app.js`](../codewalk/static/app.js), with no build step and no framework, and
-one stylesheet, [`static/app.css`](../codewalk/static/app.css), in light and dark. It isn't
+[`web/static/app.js`](../codewalk/web/static/app.js), with no build step and no framework, and
+one stylesheet, [`web/static/app.css`](../codewalk/web/static/app.css), in light and dark. It isn't
 indexed (codewalk knows Rust and Python), so it's linked rather than embedded. In order:
 
 - **The index.** Filtering by tag and text, the map of links, and the specs.
@@ -578,7 +579,6 @@ Where it could go:
   `--strict` before a release.
 - **Notes on an excerpt** from the browser, written back into the Markdown under the
   block, so a review can leave questions where they apply.
-- **Replace the deep dive's generator** with its walkthrough and `codewalk export`.
 
 ### Proposed: from the code back to walkthroughs
 

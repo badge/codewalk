@@ -20,7 +20,7 @@ import tree_sitter_rust
 from pydantic import BaseModel
 from tree_sitter import Language, Node, Parser
 
-from . import tracey
+from codewalk.spec import tracey
 
 RUST = Language(tree_sitter_rust.language())
 
@@ -198,6 +198,8 @@ def _base_type(text: str) -> str:
     return names[-1] if names else ""
 
 
+# r[impl index.languages]
+# r[impl index.start]
 def index_file(rel: str, source: bytes, parser: Parser) -> list[Symbol]:
     tree = parser.parse(source)
     out: list[Symbol] = []
@@ -295,7 +297,7 @@ class CodeIndex:
         self.root = root
         self.globs = globs
         self.files = SourceFiles(root)
-        from . import python
+        from codewalk.code import python
 
         self.parsers = {
             ".rs": (Parser(RUST), index_file),
@@ -340,6 +342,7 @@ class CodeIndex:
             self._traces = None
         return changed
 
+    # r[impl spec.traces]
     def traces(self) -> dict[str, list[Trace]]:
         """For each requirement ID, the markers that name it, in file and line order.
 
@@ -366,6 +369,9 @@ class CodeIndex:
     def in_file(self, rel: str) -> list[Symbol]:
         return self._by_file.get(rel, (0, []))[1]
 
+    # r[impl ref.tail]
+    # r[impl ref.ambiguous]
+    # r[impl ref.crate]
     def resolve(self, ref: str) -> tuple[Symbol | None, list[Symbol]]:
         """The one symbol `ref` names, or None and the candidates.
 
@@ -444,6 +450,7 @@ class CodeIndex:
             return None, hits
         return None, [s for s in pool if s.kind == "impl" and s.segments[-2] == path[-1]][:5]
 
+    # r[impl ui.context]
     def named_at(self, name: str, file: str, line: int) -> Symbol | None:
         """The symbol a name in the code most likely means, from where it's written.
 
@@ -473,6 +480,7 @@ class CodeIndex:
             return min(others, key=lambda s: abs(s.line - line))
         return found[0] if len(found) == 1 else None
 
+    # r[impl ref.nearest]
     def nearest(self, ref: str, n: int = 5) -> list[Symbol]:
         """The symbols `ref` most likely meant.
 
@@ -581,6 +589,7 @@ class CodeIndex:
         return sym.qualified
 
 
+# r[impl ref.focus]
 def narrow(sym: Symbol, focus: str, files: SourceFiles) -> Symbol | None:
     """The part of `sym` that starts at the first line containing `focus`.
 
@@ -610,7 +619,7 @@ def narrow(sym: Symbol, focus: str, files: SourceFiles) -> Symbol | None:
     while top - 1 > sym.start and lines[top - 2].strip().startswith(("//", "#")):
         top -= 1
     if sym.file.endswith(".py"):
-        from .python import block_end
+        from codewalk.code.python import block_end
 
         return sym.model_copy(
             update={"start": top, "line": first, "end": block_end(lines, first, sym.end), "signature": lines[first - 1].strip(), "doc": ""}
@@ -625,92 +634,3 @@ def narrow(sym: Symbol, focus: str, files: SourceFiles) -> Symbol | None:
             break
     first_line = lines[first - 1].strip()
     return sym.model_copy(update={"start": top, "line": first, "end": last, "signature": first_line, "doc": ""})
-
-
-class Requirement(BaseModel):
-    id: str
-    file: str
-    line: int
-    text: str
-
-
-REQ = re.compile(rf"^([a-z][a-z0-9]*)\[({tracey.ID})\]\s*$")
-
-
-class SpecIndex:
-    """Each requirement in the spec: its ID, where it is, and its text.
-
-    The spec is the files tracey's config names as specs, and any more the config gives.
-    A requirement is a line of its own, `r[id]` or with the name of a spec in tracey's
-    config, `v1[id]`. One with a spec's name is known by both, `v1:id`, since two specs
-    can have the same ID.
-
-    Parameters
-    ----------
-    root : Path
-        The repository's root, where tracey's config is looked for.
-    globs : list of str
-        Spec files, from the root, as well as those tracey's config names.
-    """
-
-    def __init__(self, root: Path, globs: list[str]):
-        self.root = root
-        specs = tracey.load(root)
-        self.globs = list(dict.fromkeys([*globs, *(g for s in specs for g in s.include)]))
-        self.prefixes = tracey.prefixes(specs)
-        self.requirements: dict[str, Requirement] = {}
-        # The prefix each spec file writes its requirements with
-        self.prefix_of: dict[str, str] = {}
-        self._mtimes: dict[str, float] = {}
-        self.refresh()
-
-    def find(self, rid: str, rel: str | None = None) -> Requirement | None:
-        """The requirement `rid` names, as written in `rel`.
-
-        In the spec `rel` is in (`slack.client` in a `v1` file is `v1:slack.client`),
-        else exactly, else the one requirement of any spec with that ID.
-
-        Parameters
-        ----------
-        rid : str
-            The ID as written.
-        rel : str or None
-            The file it's written in.
-
-        Returns
-        -------
-        Requirement or None
-            None if there's none, or several with that ID in different specs.
-        """
-        if rel and (p := self.prefix_of.get(rel)) and (r := self.requirements.get(tracey.key(p, rid))):
-            return r
-        if r := self.requirements.get(rid):
-            return r
-        found = [r for k, r in self.requirements.items() if k.split(":")[-1] == rid]
-        return found[0] if len(found) == 1 else None
-
-    def refresh(self) -> bool:
-        paths = sorted({p for g in self.globs for p in self.root.glob(g) if p.is_file()})
-        mtimes = {str(p.relative_to(self.root)): p.stat().st_mtime for p in paths}
-        if mtimes == self._mtimes:
-            return False
-        self._mtimes = mtimes
-        reqs = {}
-        self.prefix_of = {}
-        for p in paths:
-            rel = str(p.relative_to(self.root))
-            lines = p.read_text().split("\n")
-            for i, line in enumerate(lines):
-                m = REQ.match(line)
-                if not m or m.group(1) not in self.prefixes:
-                    continue
-                body = []
-                for nxt in lines[i + 1 :]:
-                    if not nxt.strip() or REQ.match(nxt):
-                        break
-                    body.append(nxt.strip())
-                rid = tracey.key(m.group(1), m.group(2))
-                self.prefix_of.setdefault(rel, m.group(1))
-                reqs[rid] = Requirement(id=rid, file=rel, line=i + 1, text=" ".join(body))
-        self.requirements = reqs
-        return True

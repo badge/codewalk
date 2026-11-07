@@ -26,6 +26,7 @@ class Config(BaseModel):
     # git's user.name, in lower case
     author: str | None = None
 
+    # r[impl note.write]
     def who(self, root: Path) -> str | None:
         if self.author:
             return self.author

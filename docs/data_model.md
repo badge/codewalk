@@ -1,4 +1,5 @@
 ---
+weight: 20
 title: codewalk's data model
 summary: The things codewalk knows about (code, spec, walkthroughs, notes, review) and how each refers to the others.
 tags: [codewalk, data-model]

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from .doc import Context, Walk
+from codewalk.walk.doc import Context, Walk
 
 
 class Item(BaseModel):
@@ -38,6 +38,7 @@ class Brief(BaseModel):
         return not (self.requests or self.questions or self.proposed or self.written or self.changed or self.broken)
 
 
+# r[impl context.brief]
 def brief(ctx: Context, rel: str) -> Brief:
     w = Walk(ctx, rel)
     out = Brief(walkthrough=rel, title=w.title)

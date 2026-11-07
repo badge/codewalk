@@ -15,7 +15,7 @@ from pygments.lexers import PythonLexer, RustLexer, TextLexer, get_lexer_by_name
 from pygments.token import STANDARD_TYPES, Token
 from pygments.util import ClassNotFound
 
-from . import tracey
+from codewalk.spec import tracey
 
 _LEXERS = {".rs": RustLexer(), ".py": PythonLexer()}
 _cache: dict[str, tuple[float, list[str]]] = {}
