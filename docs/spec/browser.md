@@ -5,8 +5,8 @@ weight: 40
 ## The browser
 
 `codewalk serve` is where walkthroughs are read and written. It's local: it listens only
-on the loopback address, writes only walkthroughs, specs and the review file, and changes
-git only to add a PRD's worktree (`serve.local`). It watches the files, and a page changes as its file, or the code it
+on the loopback address, and writes only walkthroughs and the review file
+(`serve.local`). It watches the files, and a page changes as its file, or the code it
 shows, changes (`serve.live`). Ctrl-C stops it at once, whatever pages are open
 (`serve.stop`).
 
@@ -47,10 +47,8 @@ for a spec file, the requirements its prose cites.
 ## Requirements
 
 r[serve.local]
-The server MUST listen only on 127.0.0.1, MUST NOT write any file but a walkthrough or
-spec under the docs or spec globs, of its own checkout or a PRD's worktree, or
-`codewalk.review.json`, and MUST NOT run a git command that changes anything, except to
-add a PRD's worktree.
+The server MUST listen only on 127.0.0.1, and MUST NOT write any file but a walkthrough
+or spec under the docs or spec globs, or `codewalk.review.json`.
 
 r[serve.stop]
 On SIGINT or SIGTERM, the server MUST end the pages' event streams and stop within a few

@@ -87,8 +87,9 @@ files, rather than from the spec's name. (tracey's documentation, on configurati
 
 f[tracey.other-markers] assumed
 tracey passes over a line `t[id]` or `f[id]` in a spec file, so terms and facts can sit
-beside requirements. Not checked: since it infers prefixes from markers
-([[f:tracey.prefix]]), it may take them for requirements of specs called `t` and `f`.
+beside requirements. Probably not so: its documentation says any lowercase alphanumeric
+prefix is a requirement marker, inferred from a spec's files ([[f:tracey.prefix]]), so it
+likely reads them as requirements of specs called `t` and `f`. Not checked by running it.
 
 ## Requirements
 

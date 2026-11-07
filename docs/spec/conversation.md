@@ -34,9 +34,9 @@ them, in the thread under it, which starts one if there's none. Until it's writt
 proposal is then agreed, and says so on the page and in `codewalk context`, so the agent
 knows it can be written (`proposal.agree`). Once it does, the proposal shows what was written against the
 draft, and can be settled: the block becomes `walk settled`, keeping the draft, so what
-was planned and what was done stay side by side (`proposal.settle`). A walkthrough's
-progress is how much of what it proposes is settled (`proposal.progress`); a PRD starts
-all proposed and ends all settled.
+was planned and what was done stay side by side (`proposal.settle`). A PRD is a
+walkthrough whose code is all proposed, so its progress is how much is settled
+(`proposal.progress`).
 
 ### What's in hand
 
@@ -59,6 +59,10 @@ open while any note in it, at any depth, is open.
 t[request]
 A note asking for something that applies throughout rather than once. It stays open
 until a done after it.
+
+t[prd]
+A walkthrough whose code is all proposed, written before the work; its progress is how
+much of it is settled.
 
 t[proposal]
 Code drafted in a `walk proposed` block under the name it will have, before it's
