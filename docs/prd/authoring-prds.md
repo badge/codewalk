@@ -105,6 +105,8 @@ model in full, and for code that implements a requirement, its signature and the
 it will carry. Helpers that implement nothing aren't proposed. Tests are proposed the same
 way, by the requirement each verifies.
 
+> [!note] I think we don't need to be too presecriptive here: "and for code that implements a requirement, its signature and the marker it will carry" is too strong. If we have a gnarly piece of code then maybe we include it all; if it's boilerplate then the signature is fine.
+
 New code is proposed in a `walk proposed` block, as now. A change to code that exists is
 proposed in a `walk proposed change` block, which shows the draft against the code as it
 is, and stays proposed until it's settled.
@@ -150,6 +152,8 @@ bumped. (tracey's documentation, on versioning.)
 
 > [!question] @claude: Is the prose agreed? If so, this PRD moves to `stage: spec`, and
 > the next draft writes the requirements that follow from it, here, and nothing else.
+>
+> [!answer] @matthew: Yes, prose should be broadly agreed before it moves into the spec stage _proper_, but again I think we can be flexible here: it's fine to define terms and facts, for sure, while we're still at `stage: prose`.
 
 ## Changelog
 
