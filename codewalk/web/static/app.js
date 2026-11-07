@@ -334,7 +334,10 @@
       const r = await api("/api/prd", { title: form.title.value, ask: form.ask.value });
       location.href = r.href;
     } catch (err) {
-      $(".np-error", form).textContent = JSON.parse(err.message).error || err.message;
+      // A refusal is JSON with the reason; anything else is shown as it came
+      let reason = err.message;
+      try { reason = JSON.parse(reason).error || reason; } catch { /* not JSON */ }
+      $(".np-error", form).textContent = reason;
     }
   });
   $("#new-prd [data-role=cancel]")?.addEventListener("click", () => { $("#new-prd").hidden = true; });

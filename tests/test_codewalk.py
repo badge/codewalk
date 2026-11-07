@@ -1392,3 +1392,13 @@ def test_starting_a_prd_from_the_index_writes_it_with_what_was_asked(client, rep
 def test_a_comment_in_a_walkthrough_isnt_shown(repo):
     body, _ = render(walk(repo, "# W\n\n<!-- For whoever edits it.\nOn two lines. -->\n\nShown.\n"))
     assert "whoever" not in body and "Shown." in body
+
+
+# r[verify serve.live]
+def test_pages_link_the_script_and_styles_by_what_is_in_them(client):
+    import re
+
+    page = client.get("/").text
+    js, css = re.search(r'src="(/static/app\.js\?v=[0-9a-f]{10})"', page), re.search(r'href="(/static/app\.css\?v=[0-9a-f]{10})"', page)
+    assert js and css
+    assert client.get(js.group(1)).status_code == 200 and client.get(css.group(1)).status_code == 200

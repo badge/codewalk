@@ -13,6 +13,7 @@ call that reads them holds `App.lock`; Starlette runs each in a worker thread.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import re
 import threading
 from contextlib import asynccontextmanager
@@ -46,6 +47,27 @@ STATES = {
 STATIC = Path(__file__).parent / "static"
 
 
+def static_url(name: str) -> str:
+    """A static file's address, with a digest of what's in it.
+
+    A browser keeps a script or stylesheet it's fetched, and may use it again without
+    asking whether it's changed; with the digest in the address, a changed file is a new
+    address, so a page never runs with the script it had before codewalk was updated.
+
+    Parameters
+    ----------
+    name : str
+        The file, in the static folder.
+
+    Returns
+    -------
+    str
+        Its address, as `/static/name?v=digest`.
+    """
+    digest = hashlib.sha256((STATIC / name).read_bytes()).hexdigest()[:10]
+    return f"/static/{name}?v={digest}"
+
+
 class Change(BaseModel):
     """What changed, as told to each open page."""
 
@@ -76,7 +98,9 @@ class App:
     # ---- Pages ----------------------------------------------------------------------
 
     def page(self, template: str, title: str, view: str, data: dict, **context) -> str:
-        return templates.get_template(template).render(title=title, view=view, data_json=page_data_json({"view": view, **data}), **context)
+        return templates.get_template(template).render(
+            title=title, view=view, data_json=page_data_json({"view": view, **data}), static=static_url, **context
+        )
 
     def index_page(self) -> str:
         library = Library.of(self.ctx)
