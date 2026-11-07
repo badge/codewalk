@@ -128,6 +128,8 @@ the person is in. The work, once the PRD is agreed, is done on a branch of its o
 git worktree of its own: there the prose and requirements move into the spec, the code is
 written, and the proposals are settled.
 
+> [!note] I'd rephrase this is a "Started, written and worked wherever the user wants". My problem was that I _couldn't_ do what I wanted to from a browser, but equally if I want to write a PRD entirely in my IDE (so that I don't need to have a `codewalk` instance running) then that's fine too.
+
 ### A changelog to write in
 
 Settled threads go into the changelog at the end, compacted to a line; anything else worth
@@ -152,6 +154,8 @@ bumped. (tracey's documentation, on versioning.)
 > matter, `stage: prose`, set by the person in the browser when they agree a stage, and
 > shown on the index and in `codewalk context`, which would tell the agent what may be
 > written yet. Or is a stage better read from what's there (no requirements yet: prose)?
+>
+> [!answer] @matthew: Yes, asterisk: the asterisk being that the stage gates later stages' actions, but not earlier stages', as discussed).
 
 > [!question] @claude: The branch is what I've written the spec for, in
 > the PRDs spec (since taken out). The case for the folder is that it's cheaper to
@@ -174,6 +178,10 @@ bumped. (tracey's documentation, on versioning.)
 >
 > [!note] @claude: Still so, but later: with the spec kept in the PRD, the worktree is
 > for the work, once the PRD is agreed, not for writing the PRD.
+>
+> [!answer] @matthew: Actually I think it should be "whichever", but I wouldn't mandate it and I certainly wouldn't do it automatically from the browser. We're not looking to create a new IDE here, but a means to facilitate discussion.
+>
+> [!decision] @matthew: PRDs are orthogonal to worktrees, and the PRD process neither creates nor manages worktrees.
 
 > [!question] @claude: A server for each worktree, on its own port, means nothing in the
 > server changes: it's one checkout, as now. The cost is several processes, and a PRD's
@@ -235,6 +243,8 @@ bumped. (tracey's documentation, on versioning.)
 > "written, a bit differently" from "a change not made yet". The block could say which:
 > `walk proposed change` for a change to code that exists, proposed until it's settled.
 > Does that work?
+>
+> [!answer] @matthew: Yes, that makes sense.
 
 > [!question] @claude: These won't settle. The tests aren't indexed (`sources` is
 > `codewalk/**/*.py`), so a proposed test's name never resolves, and the PRD can't reach
