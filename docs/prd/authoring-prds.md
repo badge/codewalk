@@ -58,12 +58,14 @@ fine: by then the spec and the code say what's true, and the PRD is the record o
 
 ### In stages
 
-A PRD is written in five stages, each agreed before the next is begun in earnest:
+A PRD is written in five stages, each broadly agreed before the next is begun in
+earnest:
 
 1. **The problem.** Why we want a change: a feature, a fix, whatever it is. It can name the
    code it's about as it stands.
 2. **The prose.** What we'll do about it, in words, and the terms and facts the rest of
-   the PRD needs. Rough examples are fine; proposals aren't.
+   the PRD needs, which can be defined while the prose is still being written. Rough
+   examples are fine; proposals aren't.
 3. **The spec.** The requirements that follow from the prose, going back and forth between
    the two until the spec is something we can work from.
 4. **The code.** The shape of the code and of its tests, in outline (below).
@@ -75,7 +77,8 @@ A PRD records its stage in its front matter, `stage: prose`, which the person se
 they agree a stage, and which codewalk shows on the index and in `codewalk context`. The
 stage gates what belongs to later stages, not earlier ones: while a PRD is at the prose,
 no requirements or code are written into it; once it's at the code, the prose and the
-spec can still be revised.
+spec can still be revised. It's a guide to what comes next, not a lock: the prose needn't
+be final before the spec is begun, only broadly agreed.
 
 ### Its spec, against the spec as it stands
 
@@ -100,12 +103,12 @@ term cited and defined nowhere, is an error.
 
 ### Its code, in outline
 
-At the code stage a PRD shows the shape of the code, not all of it: changes to the data
-model in full, and for code that implements a requirement, its signature and the marker
-it will carry. Helpers that implement nothing aren't proposed. Tests are proposed the same
-way, by the requirement each verifies.
-
-> [!note] I think we don't need to be too presecriptive here: "and for code that implements a requirement, its signature and the marker it will carry" is too strong. If we have a gnarly piece of code then maybe we include it all; if it's boilerplate then the signature is fine.
+At the code stage a PRD shows the shape of the code, as much of it as it takes to agree
+it, and no more. Changes to the data model are shown in full. Code that implements a
+requirement carries its marker, and is shown in full where it's intricate enough to be
+worth agreeing line by line, or by its signature where it's routine. Helpers that
+implement nothing aren't proposed. Tests are proposed the same way, by the requirement
+each verifies.
 
 New code is proposed in a `walk proposed` block, as now. A change to code that exists is
 proposed in a `walk proposed change` block, which shows the draft against the code as it
@@ -150,15 +153,21 @@ bumped. (tracey's documentation, on versioning.)
 
 ## Questions
 
-> [!question] @claude: Is the prose agreed? If so, this PRD moves to `stage: spec`, and
-> the next draft writes the requirements that follow from it, here, and nothing else.
->
-> [!answer] @matthew: Yes, prose should be broadly agreed before it moves into the spec stage _proper_, but again I think we can be flexible here: it's fine to define terms and facts, for sure, while we're still at `stage: prose`.
+> [!question] @claude: Is this PRD's prose broadly agreed, so it can move to
+> `stage: spec`? The next draft would then write the requirements that follow from it,
+> here.
 
 ## Changelog
 
 What was asked here and how it was settled, newest first.
 
+- 2026-11-07 (how much code): **note** @matthew: Don't be too prescriptive about the code:
+  a gnarly piece can be shown whole, and boilerplate by its signature. → Written into
+  [Its code, in outline](#its-code-in-outline).
+- 2026-11-07 (agreeing the prose): **question** @claude: Is the prose agreed, so this PRD
+  moves to the spec stage? → **answer** @matthew: Prose should be broadly agreed before
+  the spec stage proper, but flexibly: terms and facts can be defined at the prose stage.
+  Written into [In stages](#in-stages).
 - 2026-11-07: Tidied into a PRD to agree: the lifecycle folded into
   [In stages](#in-stages), the findings from writing it by hand folded into
   [the problem](#the-problem), and the settled threads below compacted into this
