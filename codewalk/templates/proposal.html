@@ -1,0 +1,57 @@
+{# A `walk proposed` block. Before its name exists: the draft, marked as proposed. After:
+   what was written, with the draft against it, and a button to settle it into an
+   ordinary `walk` block. #}
+<figure class="walk proposal {{ 'written' if s else 'pending' }}" data-ref="{{ ref.target }}" data-md="{{ ref.line }}" data-md-end="{{ end }}" id="proposed-{{ slug }}">
+<figcaption>
+  <div class="cap-main">
+    <span class="kind {{ 'k-' ~ s.kind if s else 'k-proposed' }}">{{ s.kind if s else "proposed" }}</span>
+    <span class="path"{% if s %} data-action="context" role="button"{% endif %}>
+      {%- for text, cls in parts -%}
+        <span class="{{ cls }}">{{ text }}</span>{% if not loop.last %}<span class="sep">::</span><wbr>{% endif %}
+      {%- endfor -%}
+    </span>
+    <span class="acts">
+      {% if zed %}<a class="act" href="{{ zed }}" title="Open in Zed">Zed</a>{% endif %}
+      <button class="act" data-action="ask" title="Ask a question about this">Ask</button>
+      {% if s %}<button class="act primary" data-action="settle" title="Replace the proposal with the code as written">Settle</button>{% endif %}
+    </span>
+  </div>
+  <div class="cap-sub">
+    {% if s %}
+    <a class="loc" href="#" data-action="context">{{ s.file }}:{{ s.line }}</a>
+    <span class="spacer"></span>
+    <button class="badge written" data-action="diff" title="Show the draft against what was written">proposed, now written</button>
+    {% elif ambiguous %}
+    <span class="loc">That name is taken {{ candidates | length }} times: {{ candidates | join(", ") }}</span>
+    <span class="spacer"></span>
+    <span class="badge changed">qualify it</span>
+    {% else %}
+    <span class="loc">{{ ref.lang or "rust" }} · not written yet</span>
+    <span class="spacer"></span>
+    <span class="badge proposed">proposed</span>
+    {% endif %}
+  </div>
+</figcaption>
+{% if rows %}
+<pre class="code"><code>
+{%- for n, line in rows -%}
+<span class="row" data-line="{{ n }}"><span class="ln">{{ n }}</span><span class="lc">{{ line }}</span></span>
+{%- endfor -%}
+</code></pre>
+<pre class="diff" hidden><code>
+{%- for row in diff -%}
+{%- if row.kind == "gap" -%}
+<span class="drow gap"><span class="dt">⋯</span>{{ row.count }} line{{ "s" if row.count > 1 }} as drafted</span>
+{%- else -%}
+<span class="drow {{ row.kind }}"><span class="dt">{{ row.tag }}</span>{{ row.text or " " }}</span>
+{%- endif -%}
+{%- endfor -%}
+</code></pre>
+{% else %}
+<pre class="code draft"><code>
+{%- for line in draft -%}
+<span class="row"><span class="ln">+</span><span class="lc">{{ line }}</span></span>
+{%- endfor -%}
+</code></pre>
+{% endif %}
+</figure>

@@ -1,0 +1,4 @@
+# Where codewalk looks, when it's run on itself: its own code, and its walkthroughs.
+sources = ["codewalk/**/*.py"]
+specs = ["docs/spec/**/*.md"]
+docs = ["docs/**/*.md"]

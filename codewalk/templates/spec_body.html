@@ -1,0 +1,35 @@
+{# A spec file: the document, and in the margin beside its prose the requirements each
+   part cites, with whether the two still agree. #}
+<div class="spec-doc">{{ body | safe }}</div>
+<aside class="margin" id="margin">
+  {% for anchor, cards in groups %}
+  <div class="mgroup" data-anchor="{{ anchor }}">
+    {% for c in cards %}
+    <div class="mcard state-{{ c.state }}{{ ' go' if c.go }}" data-req-card="{{ c.id }}"{% if c.go %} data-go="{{ c.go }}" title="Read it in its spec, with its prose"{% endif %}>
+      <div class="mc-head">
+        <a class="req" href="{{ c.href }}" data-req="{{ c.id }}">{{ c.id }}</a>
+        <span class="spacer"></span>
+        <span class="mstate" title="{{ c.state_title }}">{{ c.state_label }}</span>
+      </div>
+      {% if c.prose %}<a class="mc-prose" href="{{ c.prose_href }}" title="The prose this requirement comes from"><span class="mc-label">From the prose</span>{{ c.prose }}</a>{% endif %}
+      {% if c.text %}<div class="mc-text">{{ c.text }}</div>{% endif %}
+      {% if c.uses %}<div class="mc-uses"><span class="mc-label">In walkthroughs</span>
+        {% for u in c.uses %}<a href="{{ u.href }}">{{ u.title }}</a> <span class="mc-role">{{ u.role }}</span>{% if not loop.last %}<br>{% endif %}{% endfor %}</div>{% endif %}
+      {% if c.diff %}
+      <details class="mc-diff"><summary>{{ c.diff_label }}</summary>
+        <pre class="diff"><code>
+        {%- for row in c.diff -%}
+        {%- if row.kind == "gap" -%}<span class="drow gap"><span class="dt">⋯</span>{{ row.count }} unchanged</span>
+        {%- else -%}<span class="drow {{ row.kind }}"><span class="dt">{{ row.tag }}</span>{{ row.text or " " }}</span>{%- endif -%}
+        {%- endfor -%}
+        </code></pre>
+      </details>
+      {% endif %}
+      {% if c.state in ("never", "prose", "spec", "both") %}
+      <div class="mc-foot"><button class="act" data-action="reconcile" data-req="{{ c.id }}" title="The prose and the requirement say the same thing, as they stand">They agree</button></div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</aside>

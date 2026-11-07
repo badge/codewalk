@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block crumb %}<a href="/">Walkthroughs</a> / {{ rel }}{% endblock %}
+{% block actions %}
+  {% if errors %}<span class="pill err">{{ errors }} broken</span>{% else %}<span class="pill ok">all references resolve</span>{% endif %}
+  {% if changed %}<span class="pill warn">{{ changed }} changed since review</span>{% endif %}
+  {% if summary and summary.plan %}<span class="pill{{ ' ok' if summary.plan_status == 'done' else ' prd' }}" title="{{ summary.settled }} settled, {{ summary.written }} written and waiting, {{ summary.proposed }} not written yet">{{ (summary.kind | upper ~ ' ') if summary.kind }}{{ summary.plan_status }}: {{ summary.settled }}/{{ summary.plan }} settled</span>{% endif %}
+  {% if margin %}<button class="tb" data-action="toggle-margin" id="margin-toggle" title="The requirements beside the code, with their prose (m)">Requirements</button>{% endif %}
+  <button class="tb" data-action="review-all" title="Mark every embedded symbol reviewed as it stands">Mark all reviewed</button>
+  <a class="tb primary" href="/edit/{{ rel }}" data-action="edit" title="Edit, at this point (e)">Edit <kbd>e</kbd></a>
+{% endblock %}
+{% block body %}
+<div class="layout">
+  <nav class="toc">
+    {% if summary and (summary.tags or summary.links_to or summary.linked_from) %}
+    <div class="toc-meta">
+      {% if summary.tags %}
+      <div class="toc-head">Tags</div>
+      <div class="card-tags">{% for t in summary.tags %}<a class="tag small" href="/#tags={{ t }}">{{ t }}</a>{% endfor %}</div>
+      {% endif %}
+      {% if summary.links_to %}
+      <div class="toc-head">Links to</div>
+      {% for r in summary.links_to %}<a class="toc-rel" href="/walk/{{ r }}">{{ titles[r] | inline }}</a>{% endfor %}
+      {% endif %}
+      {% if summary.linked_from %}
+      <div class="toc-head">Linked from</div>
+      {% for r in summary.linked_from %}<a class="toc-rel" href="/walk/{{ r }}">{{ titles[r] | inline }}</a>{% endfor %}
+      {% endif %}
+    </div>
+    {% endif %}
+    <div class="toc-head">Contents</div>
+    {% for level, text, anchor in headings %}<a class="toc-{{ level }}" href="#{{ anchor }}">{{ text }}</a>{% endfor %}
+  </nav>
+  <main class="prose{{ ' spec' if margin }}" id="prose">{{ body | safe }}</main>
+  <aside class="context" id="context" hidden></aside>
+</div>
+{% endblock %}

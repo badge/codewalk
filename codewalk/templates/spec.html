@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block crumb %}<a href="/">Walkthroughs</a> / spec / {{ rel }}{% endblock %}
+{% block actions %}
+  <span class="pill">{{ v.defined | length }} requirements</span>
+  {% if v.uncited %}<span class="pill warn" title="Requirements here that no prose cites">{{ v.uncited | length }} not in the prose</span>{% endif %}
+  {% if v.missing %}<span class="pill err" title="Cited in the prose, not written in the spec yet">{{ v.missing | length }} not in the spec</span>{% endif %}
+  {% if v.drifted %}<span class="pill warn" title="Prose or requirement changed since they were reconciled">{{ v.drifted | length }} drifted</span>{% endif %}
+  <button class="tb" data-action="reconcile-all" title="Every cited requirement agrees with its prose, as they stand">They all agree</button>
+  <a class="tb primary" href="/edit/{{ rel }}" data-action="edit" title="Edit, at this point (e)">Edit <kbd>e</kbd></a>
+{% endblock %}
+{% block body %}
+<div class="layout spec-page">
+  <nav class="toc">
+    {% if v.missing %}
+    <div class="toc-head">In the prose, not the spec</div>
+    {% for c in v.missing %}<a class="toc-rel" href="#" data-goto-md="{{ c.lines[0] }}">{{ c.id }}</a>{% endfor %}
+    {% endif %}
+    {% if v.uncited %}
+    <div class="toc-head">Not cited in the prose</div>
+    {% for r in v.uncited %}<a class="toc-rel" href="#r-{{ slugs[r.id] }}">{{ r.id }}</a>{% endfor %}
+    {% endif %}
+    {% if v.drifted %}
+    <div class="toc-head">Drifted</div>
+    {% for c in v.drifted %}<a class="toc-rel" href="#" data-goto-md="{{ c.lines[0] }}">{{ c.id }}</a>{% endfor %}
+    {% endif %}
+    <div class="toc-head">Contents</div>
+    {% for level, text, anchor in headings %}<a class="toc-{{ level }}" href="#{{ anchor }}">{{ text }}</a>{% endfor %}
+  </nav>
+  <main class="prose spec" id="prose">{{ body | safe }}</main>
+  <aside class="context" id="context" hidden></aside>
+</div>
+{% endblock %}

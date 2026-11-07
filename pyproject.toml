@@ -1,0 +1,49 @@
+[project]
+name = "codewalk"
+version = "0.1.0"
+description = "Markdown walkthroughs of code, with symbol references checked against the source and shown in context"
+requires-python = ">=3.11"
+dependencies = [
+    "tree-sitter>=0.25,<0.26",
+    "tree-sitter-rust>=0.24,<0.25",
+    "markdown-it-py>=3.0",
+    "mdit-py-plugins>=0.4",
+    "pygments>=2.17",
+    "tree-sitter-python>=0.25,<0.26",
+    "pydantic>=2.14.3",
+    "rich-click>=1.9.9",
+    "rich>=15.0.0",
+    "jinja2>=3.1.6",
+    "starlette>=1.10.0",
+    "uvicorn>=0.54.0",
+    "watchfiles>=1.3.0",
+    "pyyaml>=6.0.3",
+    "pygls>=2.0",
+]
+
+[project.scripts]
+codewalk = "codewalk.cli:main"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["codewalk"]
+
+[tool.pytest.ini_options]
+# Starlette's test client asks for httpx2, which isn't vetted here yet; httpx still works
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+
+[tool.ruff]
+line-length = 140
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E741"]

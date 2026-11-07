@@ -1,0 +1,39 @@
+{# A thread of notes, from a blockquote of `[!question]`, `[!answer]`, `[!decision]`,
+   `[!request]`, `[!done]` and `[!note]` paragraphs, each note with its replies nested under
+   it. Replies are written back into the Markdown; a settled thread can be resolved: into
+   the changelog, compacted, or removed. #}
+{% macro note(n) %}
+  <div class="note note-{{ n.kind }}" data-md="{{ n.line }}" data-note="{{ n.line }}">
+    <div class="note-head">
+      <span class="nk">{{ n.kind }}</span>{% if n.author %}<span class="na">@{{ n.author }}</span>{% endif %}
+      <span class="spacer"></span>
+      <button class="act note-reply" data-action="reply-note" title="Reply to this note, under it">Reply</button>
+    </div>
+    <div class="note-body">{{ n.html }}</div>
+    {% if n.replies %}
+    <div class="replies">{% for r in n.replies %}{{ note(r) }}{% endfor %}</div>
+    {% endif %}
+  </div>
+{% endmacro %}
+<aside class="thread {{ 'settled' if t.settled else 'open' }}{{ ' standing' if t.request }}" data-md="{{ t.line }}" data-thread="{{ t.line }}">
+  {% for n in notes %}{{ note(n) }}{% endfor %}
+  <div class="thread-foot">
+    <span class="ts">
+      {%- if t.request_open %}Standing request
+      {%- elif t.open %}Open question
+      {%- elif t.request %}Done
+      {%- elif t.question %}Settled
+      {%- else %}Notes{% endif -%}
+    </span>
+    <span class="spacer"></span>
+    {% if t.settled %}
+    <button class="act" data-action="resolve" data-mode="changelog" title="Take it out of the text, keeping one line of it in the changelog at the end">To changelog</button>
+    <button class="act" data-action="resolve" data-mode="remove" title="Take it out altogether">Remove</button>
+    {% else %}
+    <button class="act" data-action="reply" data-kind="answer">Answer</button>
+    <button class="act" data-action="reply" data-kind="question">Ask more</button>
+    <button class="act" data-action="reply" data-kind="decision">Decide</button>
+    {% if t.request_open %}<button class="act" data-action="reply" data-kind="done">Done</button>{% endif %}
+    {% endif %}
+  </div>
+</aside>

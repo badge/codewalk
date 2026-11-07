@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block crumb %}<a href="/">Walkthroughs</a> / <a href="/{{ 'spec' if spec else 'walk' }}/{{ rel }}">{{ rel }}</a> / edit{% endblock %}
+{% block actions %}
+  <span class="save-state" id="save-state">Saved</span>
+  <button class="tb" data-action="sync" id="sync-toggle" title="Scroll the Markdown and the preview together">Linked scrolling</button>
+  <button class="tb primary" data-action="save" title="Save (⌘S)">Save <kbd>⌘S</kbd></button>
+  <a class="tb" href="/{{ 'spec' if spec else 'walk' }}/{{ rel }}" data-action="done" title="Back to reading, at this point (Esc)">Done</a>
+{% endblock %}
+{% block body %}
+<div class="editor">
+  <section class="pane source">
+    <div class="pane-head">Markdown <span class="hint">Type <code>[[</code> for a symbol, or a name inside a <code>```walk</code> block</span></div>
+    <div class="ed-wrap"><textarea id="src" spellcheck="false">
+{{ text }}</textarea><div class="ed-line" id="ed-line" hidden></div></div>
+    <div class="problems" id="problems"></div>
+  </section>
+  <section class="pane preview" id="preview">
+    <div class="pane-head">Preview <span class="hint">Click to find it in the Markdown</span></div>
+    <main class="prose{{ ' spec' if spec }}" id="prose">{{ body | safe }}</main>
+  </section>
+  <aside class="context" id="context" hidden></aside>
+</div>
+{% endblock %}

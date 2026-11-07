@@ -1,0 +1,63 @@
+{# One embedded symbol: a caption of two rows (what it is, then where it is and whether
+   it's been reviewed), then its code, then what's changed since review, if anything. #}
+<figure class="walk" data-ref="{{ ref.key }}" data-digest="{{ digest }}" data-md="{{ ref.line }}" id="ref-{{ slug }}">
+<figcaption>
+  <div class="cap-main">
+    <span class="kind k-{{ s.kind }}">{{ s.kind }}</span>
+    <button class="path" data-action="context" title="{{ s.qualified }}: show it in its file">
+      {%- for text, cls in parts -%}
+        <span class="{{ cls }}">{{ text }}</span>{% if not loop.last %}<span class="sep">::</span><wbr>{% endif %}
+      {%- endfor -%}
+    </button>
+    <span class="acts">
+      <a class="act" href="{{ zed }}" title="Open in Zed">Zed</a>
+      <button class="act" data-action="copy" title="Copy the reference">Copy</button>
+      <button class="act" data-action="ask" title="Ask a question about this">Ask</button>
+      <button class="act" data-action="review" title="Mark it reviewed as it stands">Reviewed</button>
+    </span>
+  </div>
+  <div class="cap-sub">
+    <a class="loc" href="#" data-action="context" title="Show it in its file">{{ s.file }}:{{ s.line }}</a>
+    {% if ref.focus %}<span class="focus" title="Only part of it: from the line containing this">› {{ ref.focus }}</span>{% endif %}
+    {% if ref.sig %}<span class="focus" title="Only its first line">signature</span>{% endif %}
+    {% if plan %}<button class="badge settled" data-action="plan" title="What was proposed, against what was written">settled · as proposed</button>{% endif %}
+    <span class="spacer"></span>
+    {% if state == "new" %}
+    <span class="badge new" title="Not reviewed yet">not reviewed</span>
+    {% elif state == "changed" %}
+    <button class="badge changed" data-action="diff" title="Show what changed">changed since review</button>
+    {% else %}
+    <span class="badge ok" title="Unchanged since it was reviewed">reviewed</span>
+    {% endif %}
+  </div>
+</figcaption>
+<pre class="code"><code>
+{%- for n, line in rows -%}
+{%- if n is none %}<span class="row more"><span class="ln"></span><span class="lc">{{ line }}</span></span>
+{%- else %}<span class="row" data-line="{{ n }}"><span class="ln">{{ n }}</span><span class="lc">{{ line }}</span></span>{% endif -%}
+{%- endfor -%}
+{%- if more %}<span class="row more"><span class="ln"></span><span class="lc">…</span></span>{% endif -%}
+</code></pre>
+{% if plan %}
+<pre class="diff plan" hidden><code>
+{%- for row in plan -%}
+{%- if row.kind == "gap" -%}
+<span class="drow gap"><span class="dt">⋯</span>{{ row.count }} line{{ "s" if row.count > 1 }} as proposed</span>
+{%- else -%}
+<span class="drow {{ row.kind }}"><span class="dt">{{ row.tag }}</span>{{ row.text or " " }}</span>
+{%- endif -%}
+{%- endfor -%}
+</code></pre>
+{% endif %}
+{% if diff %}
+<pre class="diff" hidden><code>
+{%- for row in diff -%}
+{%- if row.kind == "gap" -%}
+<span class="drow gap"><span class="dt">⋯</span>{{ row.count }} unchanged line{{ "s" if row.count > 1 }}</span>
+{%- else -%}
+<span class="drow {{ row.kind }}"><span class="dt">{{ row.tag }}</span>{{ row.text or " " }}</span>
+{%- endif -%}
+{%- endfor -%}
+</code></pre>
+{% endif %}
+</figure>

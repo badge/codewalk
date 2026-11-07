@@ -1,0 +1,8 @@
+{
+  "docs/walkthrough.md": {
+    "python::module_path": {
+      "digest": "af1612be28ba",
+      "text": "def module_path(rel: str, root: Path | None = None) -> list[str]:\n    \"\"\"A file's dotted module name, as `::` segments.\n\n    `codewalk/doc.py`, in a package `codewalk` (a folder with an `__init__.py`), is\n    `codewalk::doc`, wherever the package sits. A file outside any package is its path from\n    the root.\n\n    Parameters\n    ----------\n    rel : str\n        The file, from the root.\n    root : Path or None\n        The root; without it, the file is taken to be outside any package.\n\n    Returns\n    -------\n    list of str\n        The segments, without `__init__`.\n    \"\"\"\n    path = Path(rel).with_suffix(\"\")\n    folder = (root / rel).parent if root else None\n    if folder is None or not (folder / \"__init__.py\").exists():\n        return [p for p in path.parts if p != \"__init__\"]\n    parts = [] if path.name == \"__init__\" else [path.name]\n    while folder != root and (folder / \"__init__.py\").exists():\n        parts.insert(0, folder.name)\n        folder = folder.parent\n    return parts"
+    }
+  }
+}

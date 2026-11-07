@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block crumb %}Walkthroughs{% endblock %}
+{% block body %}
+<main class="index">
+  <div class="index-head">
+    <div>
+      <h1>Walkthroughs</h1>
+      <p class="lede">Markdown about the code, with every reference checked against it and shown in context.
+        {{ symbols }} symbols indexed, {{ requirements }} requirements.</p>
+    </div>
+  </div>
+
+  {% if library.walkthroughs %}
+  <div class="filters">
+    <input class="filter" id="filter" placeholder="Filter by title, summary, path or tag" spellcheck="false" autocomplete="off">
+    <div class="tags" id="tag-filter">
+      {% for tag, n in library.tags() %}
+      <button class="tag" data-tag="{{ tag }}">{{ tag }} <span class="n">{{ n }}</span></button>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% for folder, group in library.folders() %}
+  <section class="folder" data-folder="{{ folder }}">
+    <h2 class="folder-name">{{ folder }}/</h2>
+    <div class="cards">
+      {% for s in group %}
+      <article class="card" data-rel="{{ s.rel }}" data-tags="{{ s.tags | join(' ') }}"
+               data-search="{{ ((s.title | plain) ~ ' ' ~ (s.summary or '') ~ ' ' ~ s.rel ~ ' ' ~ (s.tags | join(' '))) | lower }}">
+        <a class="card-title" href="/walk/{{ s.rel }}">{{ s.title | inline }}</a>
+        <div class="card-path">{{ s.rel }}</div>
+        {% if s.summary %}<p class="card-summary">{{ s.summary }}</p>{% endif %}
+        {% if s.tags %}
+        <div class="card-tags">{% for t in s.tags %}<button class="tag small" data-tag="{{ t }}">{{ t }}</button>{% endfor %}</div>
+        {% endif %}
+        {% if s.links_to or s.linked_from %}
+        <div class="card-rel">
+          {% if s.links_to %}<div><span class="rl">Links to</span>{% for r in s.links_to %}<a href="/walk/{{ r }}" data-rel-link="{{ r }}">{{ titles[r] | inline }}</a>{% endfor %}</div>{% endif %}
+          {% if s.linked_from %}<div><span class="rl">Linked from</span>{% for r in s.linked_from %}<a href="/walk/{{ r }}" data-rel-link="{{ r }}">{{ titles[r] | inline }}</a>{% endfor %}</div>{% endif %}
+        </div>
+        {% endif %}
+        <div class="card-meta">
+          {{ s.references }} references · {{ s.embedded }} embedded
+          {% if s.broken %}<span class="pill err">{{ s.broken }} broken</span>{% else %}<span class="pill ok">all resolve</span>{% endif %}
+          {% if s.changed %}<span class="pill warn">{{ s.changed }} changed</span>{% endif %}
+        </div>
+        {% if s.plan %}
+        <div class="progress" title="{{ s.settled }} settled, {{ s.written }} written and waiting, {{ s.proposed }} not written yet">
+          {% if s.kind %}<span class="pill prd">{{ s.kind | upper }}</span>{% endif %}
+          <span class="meter"><span style="width:{{ (100 * s.settled / s.plan) | round | int }}%"></span></span>
+          {{ s.plan_status }}: {{ s.settled }} of {{ s.plan }} settled{% if s.written %}, {{ s.written }} to settle{% endif %}
+        </div>
+        {% endif %}
+        <div class="meter" title="{{ s.reviewed }} of {{ s.embedded }} reviewed as they stand"><span style="width:{{ s.reviewed_pct }}%"></span></div>
+        <div class="card-foot">{{ s.reviewed_pct }}% reviewed as the code stands</div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+  <p class="empty" id="no-match" hidden>No walkthroughs match.</p>
+  {% if library.specs %}
+  <section class="specs-list">
+    <h2 class="folder-name">specs: the prose beside the requirements it gives rise to</h2>
+    <table class="spec-table">
+      <thead><tr><th>Spec</th><th>Requirements</th><th>Cited in its prose</th><th>Not in the spec yet</th><th>Drifted</th></tr></thead>
+      <tbody>
+      {% for depth, folder, s in library.spec_tree() %}
+      {% if folder %}
+      <tr class="spec-folder"><td colspan="5" style="padding-left:{{ 10 + depth * 18 }}px">{{ folder }}/</td></tr>
+      {% else %}
+      <tr>
+        <td style="padding-left:{{ 10 + depth * 18 }}px"><a href="/spec/{{ s.rel }}">{{ s.title | inline }}</a><div class="card-path">{{ s.rel.split('/')[-1] }}</div></td>
+        <td>{{ s.requirements }}</td>
+        <td>{% if s.requirements %}<span class="meter small" title="{{ s.cited }} of {{ s.requirements }}"><span style="width:{{ (100 * s.cited / s.requirements) | round | int }}%"></span></span> {{ s.cited }}{% else %}–{% endif %}</td>
+        <td>{% if s.missing %}<span class="pill err">{{ s.missing }}</span>{% else %}–{% endif %}</td>
+        <td>{% if s.drifted %}<span class="pill warn">{{ s.drifted }}</span>{% else %}–{% endif %}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+  {% else %}
+  <p class="empty">No walkthroughs yet: a Markdown file under the docs folders with a <code>```walk</code> block or a <code>[[symbol]]</code> becomes one.</p>
+  {% endif %}
+</main>
+{% endblock %}

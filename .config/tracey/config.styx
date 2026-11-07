@@ -1,0 +1,17 @@
+@schema {id crate:tracey-config@1, cli tracey}
+
+// codewalk's spec, and the code and tests held to it. The tests are their own files, so
+// they may only verify.
+specs (
+    {
+        name codewalk
+        include (docs/spec/**/*.md)
+        impls (
+            {
+                name python
+                include (codewalk/**/*.py)
+                test_include (tests/**/*.py)
+            }
+        )
+    }
+)

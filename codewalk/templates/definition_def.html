@@ -1,0 +1,9 @@
+{# Where a term or a fact is defined. #}
+<div class="def-block def-{{ kind }}" id="{{ kind[0] }}-{{ slug }}" data-md="{{ line }}">
+  <div class="def-head">
+    <span class="kind k-{{ kind }}">{{ kind }}</span>
+    <span class="def-id">{{ d.words if d and kind == "term" else id }}</span>
+    {% if d and d.status %}<span class="status s-{{ d.status }}">{{ d.status }}</span>{% endif %}
+  </div>
+  <div class="def-text">{{ body }}</div>
+</div>

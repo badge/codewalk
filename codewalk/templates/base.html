@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title | plain }} · codewalk</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="page-{{ view }}">
+<header class="topbar">
+  <a class="brand" href="/">codewalk</a>
+  <span class="crumb">{% block crumb %}{% endblock %}</span>
+  <span class="spacer"></span>
+  {% block actions %}{% endblock %}
+  <a class="tb" href="/glossary" title="Terms and facts">Glossary</a>
+  <button class="tb" data-action="palette" title="Find a symbol (/)">Find symbol <kbd>/</kbd></button>
+  <button class="tb" data-action="theme" title="Light or dark">◐</button>
+</header>
+{% block body %}{% endblock %}
+<script id="page-data" type="application/json">{{ data_json | safe }}</script>
+<script src="/static/app.js"></script>
+</body>
+</html>

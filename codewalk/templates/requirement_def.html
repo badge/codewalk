@@ -1,0 +1,9 @@
+{# Where a spec defines a requirement. #}
+<div class="req-def" id="r-{{ slug }}" data-md="{{ line }}" data-req-def="{{ id }}">
+  <div class="req-def-head">
+    <a class="req" href="#r-{{ slug }}" data-req="{{ id }}">{{ id }}</a>
+    <span class="spacer"></span>
+    {% for t in traces %}<a class="trace t-{{ t.kind }}" href="#" data-file="{{ t.file }}" data-start="{{ t.start }}" data-end="{{ t.end }}" data-line="{{ t.line }}" title="{{ t.kind }}: {{ t.file }}:{{ t.line }}"><span class="tk">{{ t.kind }}</span>{{ t.name.split("::")[-1] }}</a>{% endfor %}
+  </div>
+  <div class="req-def-text">{{ body }}</div>
+</div>

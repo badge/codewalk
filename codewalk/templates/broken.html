@@ -1,0 +1,14 @@
+{# A reference in a `walk` block that names no one symbol, with what it might mean. #}
+<div class="walk broken-block" data-md="{{ ref.line }}">
+  <div class="msg">⚠
+    {% if ref.error %}{{ ref.error }}
+    {% elif ambiguous %}<code>{{ ref.target }}</code> names {{ candidates | length }} symbols. Qualify it:
+    {% else %}<code>{{ ref.target }}</code> names nothing in the code.{% if candidates %} Did you mean:{% endif %}
+    {% endif %}
+  </div>
+  <ul>
+  {% for name, where in candidates %}
+    <li><button class="cand" data-action="copy-text" data-text="{{ name }}">{{ name }}</button> <span class="where">{{ where }}</span></li>
+  {% endfor %}
+  </ul>
+</div>

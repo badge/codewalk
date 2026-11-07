@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+# What codewalk works out from the files, kept to save working it out again
+.codewalk/

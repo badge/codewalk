@@ -1,0 +1,663 @@
+"""The web view: walkthroughs in the browser, with their code, an editor and live reload.
+
+Each walkthrough is rendered with its code, the code in its file beside it, a browser
+editor with symbol completion, and live reload as the Markdown or the code changes.
+
+Local only: it listens on 127.0.0.1, and writes only walkthroughs and the review file.
+
+Pages and the API are plain functions on `App`, called from Starlette's routes, so they
+can be tested without a server. The index and the walkthroughs are shared state, so every
+call that reads them holds `App.lock`; Starlette runs each in a worker thread.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import re
+import threading
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+import uvicorn
+import watchfiles
+from pydantic import BaseModel
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
+
+from . import notes, spec, trail
+from .doc import Context, Walk, settle
+from .highlight import highlight_lines
+from .library import Library
+from .render import _slug, diff_rows, page_data_json, render, requirement_html, templates
+
+STATES = {
+    "never": ("not reconciled", "No one has said this and its prose agree yet"),
+    "ok": ("agrees", "Unchanged since it and its prose were reconciled"),
+    "prose": ("prose changed", "The prose citing it changed since they were reconciled: does the requirement still follow?"),
+    "spec": ("spec changed", "The requirement changed since they were reconciled: does the prose still say so?"),
+    "both": ("both changed", "Both changed since they were reconciled"),
+    "missing": ("not in the spec yet", "Cited in the prose, but no requirement has this ID yet"),
+}
+
+STATIC = Path(__file__).parent / "static"
+
+
+class Change(BaseModel):
+    """What changed, as told to each open page."""
+
+    # The code or the spec changed
+    code: bool = False
+    # Walkthroughs whose Markdown changed, as paths from the root
+    docs: list[str] = []
+    review: bool = False
+
+
+class App:
+    """What the server serves: its pages, and the changes made from them.
+
+    Parameters
+    ----------
+    ctx : Context
+        The project.
+    """
+
+    def __init__(self, ctx: Context):
+        self.ctx = ctx
+        self.lock = threading.Lock()
+        self.subscribers: set[asyncio.Queue[Change]] = set()
+
+    # ---- Pages ----------------------------------------------------------------------
+
+    def page(self, template: str, title: str, view: str, data: dict, **context) -> str:
+        return templates.get_template(template).render(title=title, view=view, data_json=page_data_json({"view": view, **data}), **context)
+
+    def index_page(self) -> str:
+        library = Library.of(self.ctx)
+        return self.page(
+            "index.html",
+            "Walkthroughs",
+            "index",
+            {},
+            library=library,
+            titles=library.titles(),
+            symbols=len(self.ctx.index.symbols),
+            requirements=len(self.ctx.spec.requirements),
+        )
+
+    ROLES = {
+        "proposes": "proposed here",
+        "proposes a test of": "test proposed here",
+        "implements": "implemented here",
+        "verifies": "verified here",
+        "cites": "cited here",
+    }
+
+    def walk_body(self, rel: str, text: str | None = None) -> tuple[str, dict, Walk]:
+        """A walkthrough, with the requirements each block has in its margin.
+
+        Beside each block, the margin shows the requirements it proposes, implements,
+        verifies or cites, each with the prose it came from.
+
+        Parameters
+        ----------
+        rel : str
+            The walkthrough, from the root.
+        text : str or None
+            Its Markdown, if not as saved (while it's being edited).
+
+        Returns
+        -------
+        html : str
+            The document, with its margin if it has one.
+        data : dict
+            The page's data; `margin` is set if there's a margin.
+        walk : Walk
+            The walkthrough, parsed.
+        """
+        w = Walk(self.ctx, rel, text)
+        body, data = render(w)
+        views: dict[str, spec.SpecView] = {}
+        groups: dict[int, list[dict]] = {}
+        for link in trail.links(w):
+            req = self.ctx.spec.requirements.get(link.id)
+            card = {"id": link.id, "state": "role", "state_label": self.ROLES[link.role], "state_title": "", "diff": None}
+            if req:
+                # The whole card goes to the spec, at the prose it comes from if there is some
+                o = trail.origin(self.ctx, link.id, views)
+                at = o if o and o.prose else req
+                card["href"] = card["go"] = f"/spec/{at.file}?line={at.line}&req={link.id}"
+                card["text"] = requirement_html(req.text)
+            else:
+                card.update({"href": "#", "text": None, "state": "missing", "state_label": "not in the spec yet"})
+            groups.setdefault(link.line, []).append(card)
+        if not groups:
+            return body, data, w
+        html = templates.get_template("spec_body.html").render(body=body, groups=sorted(groups.items()))
+        data["margin"] = True
+        return html, data, w
+
+    def walk_page(self, rel: str) -> str:
+        body, data, w = self.walk_body(rel)
+        problems = w.problems()
+        library = Library.of(self.ctx)
+        data.update({"doc": rel, "problems": [p.model_dump() for p in problems]})
+        return self.page(
+            "walk.html",
+            w.title,
+            "walk",
+            data,
+            rel=rel,
+            body=body,
+            margin=data.get("margin", False),
+            headings=w.headings(),
+            summary=library.get(rel),
+            titles=library.titles(),
+            errors=sum(1 for p in problems if p.severity == "error"),
+            changed=sum(1 for p in problems if p.severity == "warning"),
+        )
+
+    def is_spec(self, rel: str) -> bool:
+        return rel in self.ctx.spec_paths()
+
+    def spec_body(self, rel: str, text: str | None = None) -> tuple[str, dict, spec.SpecView, Walk]:
+        """A spec file's document and margin, as HTML, with its page data.
+
+        Parameters
+        ----------
+        rel : str
+            The spec file, from the root.
+        text : str or None
+            Its Markdown, if not as saved (while it's being edited).
+
+        Returns
+        -------
+        html : str
+            The document and its margin.
+        data : dict
+            The page's data.
+        view : spec.SpecView
+            Its requirements against its prose.
+        walk : Walk
+            The file, parsed.
+        """
+        w = Walk(self.ctx, rel, text)
+        body, data = render(w, spec_mode=True)
+        v = spec.view(self.ctx, rel, text)
+        used = trail.uses(self.ctx)
+        groups: dict[int, list[dict]] = {}
+        for c in sorted(v.citations, key=lambda c: c.lines[0]):
+            req = c.requirement
+            label, title = STATES[c.state]
+            card = {"id": c.id, "state": c.state, "state_label": label, "state_title": title, "diff": None}
+            if req:
+                card["href"] = f"#r-{_slug(c.id)}" if req.file == rel else f"/spec/{req.file}#r-{_slug(c.id)}"
+                card["text"] = requirement_html(req.text)
+                key = spec.review_key(rel)
+                if c.state in ("prose", "both") and (was := self.ctx.review.get(key, f"{c.id}#prose")):
+                    card["diff"], card["diff_label"] = diff_rows(was.text, c.prose), "What changed in the prose"
+                elif c.state == "spec" and (was := self.ctx.review.get(key, f"{c.id}#spec")):
+                    card["diff"], card["diff_label"] = diff_rows(was.text, req.text), "What changed in the requirement"
+            else:
+                card["href"], card["text"] = "#", None
+            card["uses"] = [
+                {"href": f"/walk/{u.walkthrough}?line={u.line}", "title": u.title, "role": self.ROLES[u.role]} for u in used.get(c.id, [])
+            ]
+            groups.setdefault(c.lines[0], []).append(card)
+        html = templates.get_template("spec_body.html").render(body=body, groups=sorted(groups.items()))
+        return html, data, v, w
+
+    def spec_page(self, rel: str) -> str:
+        html, data, v, w = self.spec_body(rel)
+        data.update({"doc": rel, "spec": True, "problems": []})
+        return self.page(
+            "spec.html", w.title, "spec", data, rel=rel, body=html, v=v, headings=w.headings(), slugs={r.id: _slug(r.id) for r in v.defined}
+        )
+
+    def reconcile(self, rel: str, rid: str | None) -> dict:
+        self.writable(rel)
+        return {"reconciled": spec.reconcile(self.ctx, rel, rid)}
+
+    def edit_page(self, rel: str) -> str:
+        self.writable(rel)
+        if self.is_spec(rel):
+            body, data, _, w = self.spec_body(rel)
+            data.update({"doc": rel, "spec": True, "problems": []})
+            return self.page("edit.html", f"Editing {w.title}", "edit", data, rel=rel, body=body, text=w.text, spec=True)
+        body, data, w = self.walk_body(rel)
+        data.update({"doc": rel, "problems": [p.model_dump() for p in w.problems()]})
+        return self.page("edit.html", f"Editing {w.title}", "edit", data, rel=rel, body=body, text=w.text, spec=data.get("margin", False))
+
+    # ---- API ------------------------------------------------------------------------
+
+    def file_view(self, rel: str) -> dict:
+        path = (self.ctx.root / rel).resolve()
+        if self.ctx.root not in path.parents or not path.is_file():
+            raise FileNotFoundError(rel)
+        outline = [
+            {
+                "ref": self.ctx.index.shortest_unique(s),
+                "qualified": s.qualified,
+                "kind": s.kind,
+                "line": s.line,
+                "start": s.start,
+                "end": s.end,
+                "depth": s.qualified.count("::"),
+            }
+            for s in sorted(self.ctx.index.in_file(rel), key=lambda s: s.line)
+            if s.kind not in ("field", "impl")
+        ]
+        return {"file": rel, "lines": highlight_lines(path), "outline": outline, "zed": f"zed://file/{path}"}
+
+    def glossary_page(self) -> str:
+        g = self.ctx.glossary
+        # Where each is cited or mentioned, across the walkthroughs and specs
+        uses: dict[str, list[str]] = {}
+        pattern = g.mentions()
+        for rel in sorted(set(self.ctx.walkthroughs()) | set(self.ctx.spec_paths())):
+            text = (self.ctx.root / rel).read_text()
+            for key in {f"t:{m}" for m in re.findall(r"(?:\[\[t:|\(term:)([a-z0-9.\-]+)", text)} | {
+                f"f:{m}" for m in re.findall(r"(?:\[\[f:|\(fact:)([a-z0-9.\-]+)", text)
+            }:
+                uses.setdefault(key, []).append(rel)
+            if pattern:
+                mentioned = {d.id for x in pattern.finditer(text) if (d := g.term_for(x.group(1)))}
+                for tid in sorted(mentioned):
+                    if rel not in uses.setdefault(f"t:{tid}", []):
+                        uses[f"t:{tid}"].append(rel)
+
+        def view(rel: str) -> str:
+            return "spec" if rel in self.ctx.spec_paths() else "walk"
+
+        terms = sorted(g.terms.values(), key=lambda d: d.id)
+        facts = sorted(g.facts.values(), key=lambda d: (("documented", "observed", "assumed").index(d.status or "assumed"), d.id))
+        return self.page(
+            "glossary.html",
+            "Glossary",
+            "glossary",
+            {},
+            terms=terms,
+            facts=facts,
+            uses=uses,
+            view_of=view,
+            slug=_slug,
+            text=requirement_html,
+        )
+
+    def symbols(self, q: str) -> list[dict]:
+        if q.startswith(("t:", "f:", "r:")):
+            return self.definitions(q)
+        return [
+            {
+                "ref": self.ctx.index.shortest_unique(s),
+                **s.model_dump(include={"qualified", "kind", "file", "line", "start", "end", "signature", "doc"}),
+            }
+            for s in self.ctx.index.search(q)
+        ]
+
+    def definitions(self, q: str) -> list[dict]:
+        """Terms, facts or requirements whose ID starts with or contains what follows the prefix.
+
+        For completing `[[t:`, `[[f:` and `[[r:`.
+
+        Parameters
+        ----------
+        q : str
+            `t:`, `f:` or `r:`, then what's been typed.
+
+        Returns
+        -------
+        list of dict
+            Up to 30, those starting with it first, shaped like `symbols`' results.
+        """
+        kind, _, want = q.partition(":")
+        if kind == "r":
+            pool = [(r.id, "req", r.file, r.line, r.text) for r in self.ctx.spec.requirements.values()]
+        else:
+            table = self.ctx.glossary.terms if kind == "t" else self.ctx.glossary.facts
+            pool = [(d.id, d.kind, d.file, d.line, d.text) for d in table.values()]
+        hits = sorted((p for p in pool if want.lower() in p[0]), key=lambda p: (not p[0].startswith(want.lower()), p[0]))
+        return [
+            {"ref": f"{kind}:{i}", "qualified": i, "kind": k, "file": f, "line": n, "start": n, "end": n, "signature": i, "doc": t}
+            for i, k, f, n, t in hits[:30]
+        ]
+
+    def render(self, rel: str, text: str) -> dict:
+        if self.is_spec(rel):
+            body, data, _, w = self.spec_body(rel, text)
+            return {"html": body, "data": data, "problems": [], "headings": w.headings(), "title": w.title}
+        body, data, w = self.walk_body(rel, text)
+        return {"html": body, "data": data, "problems": [p.model_dump() for p in w.problems()], "headings": w.headings(), "title": w.title}
+
+    def writable(self, rel: str) -> Path:
+        """`rel`, if it's a Markdown file under the docs folders: nothing else is written.
+
+        Parameters
+        ----------
+        rel : str
+            The file, from the root.
+
+        Returns
+        -------
+        Path
+            Its full path.
+
+        Raises
+        ------
+        PermissionError
+            If it isn't one that can be written.
+        """
+        path = (self.ctx.root / rel).resolve()
+        if path.suffix != ".md" or rel not in self.ctx.editable():
+            raise PermissionError(rel)
+        return path
+
+    def save(self, rel: str, text: str) -> dict:
+        path = self.writable(rel)
+        path.write_text(text)
+        return {"saved": True}
+
+    def note(
+        self,
+        rel: str,
+        kind: str,
+        body: str,
+        after: int | None = None,
+        thread: int | None = None,
+        to: int | None = None,
+        about: int | None = None,
+    ) -> dict:
+        """Write a note into a walkthrough.
+
+        A new question after line `after`, or a note added to the thread that starts on line
+        `thread`.
+
+        Parameters
+        ----------
+        rel : str
+            The walkthrough, from the root.
+        kind : str
+            The note's kind; a new thread is always a question.
+        body : str
+            The note's Markdown.
+        after : int or None
+            For a new question, the line to put it after.
+        thread : int or None
+            For a reply, the line its thread starts on.
+        to : int or None
+            For a reply to one note, the line it starts on.
+        about : int or None
+            For a new question about one reference in a `walk` block, its line.
+
+        Returns
+        -------
+        dict
+            `written`, and the `author` it was written as.
+
+        Raises
+        ------
+        PermissionError
+            If `rel` isn't a file that can be written.
+        FileNotFoundError
+            If no thread starts on line `thread`.
+        """
+        path = self.writable(rel)
+        text = path.read_text()
+        author = self.ctx.config.who(self.ctx.root)
+        if to is not None:
+            found = next((n for t in Walk(self.ctx, rel, text).threads if (n := t.find(to))), None)
+            if found is None:
+                raise FileNotFoundError(f"no note on line {to}")
+            text = notes.reply_to(text, found, kind, author, body)
+        elif thread is not None:
+            found = next((t for t in Walk(self.ctx, rel, text).threads if t.line == thread), None)
+            if found is None:
+                raise FileNotFoundError(f"no thread on line {thread}")
+            text = notes.reply(text, found, kind, author, body)
+        elif about is not None:
+            text = notes.ask_about(text, about, author, body)
+        else:
+            text = notes.ask(text, after or 0, author, body)
+        path.write_text(text)
+        return {"written": True, "author": author}
+
+    def resolve(self, rel: str, thread: int, mode: str) -> dict:
+        """Take a settled thread out of a walkthrough: into its changelog, or away."""
+        import datetime
+
+        path = self.writable(rel)
+        w = Walk(self.ctx, rel)
+        found = next((t for t in w.threads if t.line == thread), None)
+        if found is None:
+            raise FileNotFoundError(f"no thread on line {thread}")
+        about = [
+            r.key
+            for r in w.refs
+            if r.kind in ("embed", "proposal") and found.about_line is not None and found.about_line <= r.line < found.line
+        ]
+        path.write_text(notes.resolve(w.text, found, mode, datetime.date.today().isoformat(), about))
+        return {"resolved": mode}
+
+    def settle(self, rel: str, line: int) -> dict:
+        path = self.writable(rel)
+        w = Walk(self.ctx, rel)
+        ref = next((r for r in w.refs if r.kind == "proposal" and r.line == line and r.symbol), None)
+        if ref is None:
+            raise FileNotFoundError(f"no written proposal on line {line}")
+        path.write_text(settle(w.text, line, ref.target))
+        return {"settled": ref.target}
+
+    def review(self, rel: str, ref: str | None) -> dict:
+        w = Walk(self.ctx, rel)
+        files = self.ctx.index.files
+        done = []
+        for r in w.embeds:
+            if r.symbol and (ref is None or r.key == ref):
+                self.ctx.review.mark(rel, r.key, r.symbol.digest(files), r.symbol.text(files))
+                done.append(r.key)
+        if ref is None:
+            self.ctx.review.forget_missing(rel, {r.key for r in w.embeds})
+        return {"reviewed": done}
+
+    # ---- Watching -----------------------------------------------------------------------
+
+    def watched(self) -> list[Path]:
+        """The folders the globs look in: each glob up to its first wildcard.
+
+        Returns
+        -------
+        list of Path
+            The folders, any inside another left out.
+        """
+        dirs = set()
+        for g in [*self.ctx.config.sources, *self.ctx.spec.globs, *self.ctx.config.docs]:
+            fixed = []
+            for part in Path(g).parts:
+                if any(c in part for c in "*?["):
+                    break
+                fixed.append(part)
+            path = self.ctx.root.joinpath(*fixed)
+            dirs.add(path if path.is_dir() else path.parent)
+        # Drop any folder inside another
+        return sorted(d for d in dirs if not any(o != d and o in d.parents for o in dirs))
+
+    def changed(self, paths: set[str]) -> Change | None:
+        """What a batch of changed files means for the pages.
+
+        Parameters
+        ----------
+        paths : set of str
+            The files that changed, as full paths.
+
+        Returns
+        -------
+        Change or None
+            None if nothing a page shows has changed.
+        """
+        with self.lock:
+            code = self.ctx.refresh()
+            docs = set(self.ctx.doc_paths())
+        rels = {str(Path(p).relative_to(self.ctx.root)) for p in paths if Path(p).is_relative_to(self.ctx.root)}
+        change = Change(code=code, docs=sorted(rels & docs), review=self.ctx.review.path.name in rels)
+        return change if change.code or change.docs or change.review else None
+
+    async def watch(self, stop: asyncio.Event) -> None:
+        review = self.ctx.review.path.name
+
+        async def follow(paths, recursive: bool, keep):
+            async for batch in watchfiles.awatch(*paths, recursive=recursive, debounce=120, step=40, stop_event=stop, watch_filter=keep):
+                change = await asyncio.to_thread(self.changed, {p for _, p in batch})
+                if change:
+                    for q in list(self.subscribers):
+                        q.put_nowait(change)
+
+        await asyncio.gather(
+            follow(self.watched(), True, lambda _, p: p.endswith((".rs", ".py", ".md"))),
+            # The review file is at the root, which is too big to watch whole
+            follow([self.ctx.root], False, lambda _, p: Path(p).name == review),
+        )
+
+
+def make_app(ctx: Context, watch: bool = True) -> Starlette:
+    app = App(ctx)
+
+    def locked(fn):
+        def run(*args):
+            with app.lock:
+                return fn(*args)
+
+        return run
+
+    async def threaded(fn, *args):
+        return await asyncio.to_thread(locked(fn), *args)
+
+    async def index(request: Request):
+        return HTMLResponse(await threaded(app.index_page))
+
+    async def walk(request: Request):
+        return HTMLResponse(await threaded(app.walk_page, request.path_params["rel"]))
+
+    async def glossary(request: Request):
+        return HTMLResponse(await threaded(app.glossary_page))
+
+    async def spec_(request: Request):
+        return HTMLResponse(await threaded(app.spec_page, request.path_params["rel"]))
+
+    async def reconcile(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.reconcile, b["path"], b.get("id")))
+
+    async def edit(request: Request):
+        return HTMLResponse(await threaded(app.edit_page, request.path_params["rel"]))
+
+    async def file(request: Request):
+        return JSONResponse(await threaded(app.file_view, request.query_params["path"]))
+
+    async def named(request: Request):
+        q = request.query_params
+        s = app.ctx.index.named_at(q["name"], q["file"], int(q.get("line", 0)))
+        if s is None:
+            raise FileNotFoundError(f"no one symbol called {q['name']}")
+        return JSONResponse({"file": s.file, "start": s.start, "end": s.end, "line": s.line, "qualified": s.qualified})
+
+    async def symbols(request: Request):
+        return JSONResponse(await threaded(app.symbols, request.query_params.get("q", "")))
+
+    async def source(request: Request):
+        rel = request.query_params["path"]
+        return JSONResponse({"text": (await threaded(app.writable, rel)).read_text()})
+
+    async def render_(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.render, b["path"], b["text"]))
+
+    async def save(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.save, b["path"], b["text"]))
+
+    async def review(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.review, b["path"], b.get("ref")))
+
+    async def note(request: Request):
+        b = await request.json()
+        return JSONResponse(
+            await threaded(app.note, b["path"], b["kind"], b["text"], b.get("after"), b.get("thread"), b.get("to"), b.get("about"))
+        )
+
+    async def resolve(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.resolve, b["path"], int(b["thread"]), b["mode"]))
+
+    async def settle_(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.settle, b["path"], int(b["line"])))
+
+    async def events(request: Request):
+        q: asyncio.Queue[Change] = asyncio.Queue()
+        app.subscribers.add(q)
+
+        async def stream():
+            try:
+                yield ": connected\n\n"
+                while not await request.is_disconnected():
+                    try:
+                        change = await asyncio.wait_for(q.get(), timeout=15)
+                        yield f"data: {change.model_dump_json()}\n\n"
+                    except TimeoutError:
+                        yield ": ping\n\n"
+            finally:
+                app.subscribers.discard(q)
+
+        return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-store"})
+
+    async def not_found(request: Request, exc):
+        return PlainTextResponse(f"Not found: {exc}", status_code=404)
+
+    async def refused(request: Request, exc):
+        return JSONResponse({"error": str(exc)}, status_code=409)
+
+    async def forbidden(request: Request, exc):
+        return JSONResponse({"error": f"not a walkthrough: {exc}"}, status_code=403)
+
+    @asynccontextmanager
+    async def lifespan(_):
+        stop = asyncio.Event()
+        task = asyncio.create_task(app.watch(stop)) if watch else None
+        yield
+        stop.set()
+        if task:
+            task.cancel()
+
+    starlette = Starlette(
+        routes=[
+            Route("/", index),
+            Route("/walk/{rel:path}", walk),
+            Route("/edit/{rel:path}", edit),
+            Route("/spec/{rel:path}", spec_),
+            Route("/glossary", glossary),
+            Route("/api/file", file),
+            Route("/api/symbols", symbols),
+            Route("/api/named", named),
+            Route("/api/source", source),
+            Route("/api/render", render_, methods=["POST"]),
+            Route("/api/save", save, methods=["POST"]),
+            Route("/api/review", review, methods=["POST"]),
+            Route("/api/note", note, methods=["POST"]),
+            Route("/api/settle", settle_, methods=["POST"]),
+            Route("/api/resolve", resolve, methods=["POST"]),
+            Route("/api/reconcile", reconcile, methods=["POST"]),
+            Route("/events", events),
+            Mount("/static", StaticFiles(directory=STATIC)),
+        ],
+        exception_handlers={FileNotFoundError: not_found, PermissionError: forbidden, KeyError: not_found, ValueError: refused},
+        lifespan=lifespan,
+    )
+    starlette.state.app = app
+    return starlette
+
+
+def serve(ctx: Context, port: int) -> None:
+    uvicorn.run(make_app(ctx), host="127.0.0.1", port=port, log_level="warning")
