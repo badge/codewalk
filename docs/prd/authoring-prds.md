@@ -232,26 +232,6 @@ or change a branch or a worktree.
 
 ## The code
 
-> [!note] @claude: As built, every block below is settled: each shows the code as it was
-> written, with the draft kept beside it. Where they differ:
->
-> - **Signatures** filled out as drafted, with their docstrings in full.
-> - **One pattern for a version**, `tracey.VERSION`, which `REQ`, both `MARKER`s and the
->   spec view's and renderer's requirement lines all use, so they can't disagree.
-> - **Refusals** the outline didn't spell out: `App::set_stage` refuses a stage that isn't
->   one, or a file that isn't a PRD; `prd::start` a title with nothing to name a file
->   from; and `App::start_prd` turns "there's one there already" into a 409, as the
->   server does for other refusals.
-> - **More than the outline named,** each implementing a requirement: every PRD is a
->   walkthrough whether it makes a reference or not, so `codewalk check` reads one at the
->   problem stage (`prd.check`); the glossary skips PRDs by their front matter
->   (`terms.is_prd`) and a PRD's citations look in its own definitions (`term.errors+2`);
->   a trace carries its version (`spec.traces+2`); a PRD's page shows its requirements as
->   cards, a changed one word by word against the spec (`prd.compare`); the stage control
->   writes the front matter through `doc.set_front_matter` (`prd.stage-set`); and a
->   paragraph that's only an HTML comment isn't shown, so the template's guidance stays in
->   the editor (`prd.template`).
-
 The shape of the change, in the order of the spec: the data model in full, and the code
 that implements each requirement, in full where it's intricate and by its signature where
 it's routine. Changes to code that exists are in `walk proposed change` blocks, which
@@ -740,6 +720,8 @@ beside [[notes::ask]]:
 
 ```walk settled python
 prd::start
+
+- 2026-11-07: **note** @claude: As built, every block below is settled: each shows the code as it was written, with the draft kept beside it.
 # r[impl prd.start]
 def start(ctx: Context, title: str, ask: str) -> str:
     """Start a PRD at `docs/prd/` and the title's slug, with what was asked as a request.
