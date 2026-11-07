@@ -9,14 +9,30 @@ related: ["../walkthrough.md"]
 
 # Authoring PRDs
 
-> [!note] @claude: The first PRD, written mostly by hand, to find out how writing one
-> should go. It's a PRD about PRDs: the process it settles on is the one it was written
-> with, and what was awkward along the way is at the end, under
-> [what writing it showed](#what-writing-it-showed).
->
-> [!note] @matthew: The entire process should run through the UI, in concert with an
-> agent like Claude running in its own application alongside. So we should be able to
-> start a PRD from the UI.
+> [!question] (BTW I am typing this in the edit view, but I cannot see it in the rendered view when it is a `[!note]`, as I can when it is a question, so really it's a note but I'm typing it as a question.) Re the spec, prose, etc.: IMO the value of a PRD is greatest when it can be read in isolation, assuming reasonable familiarity with the codebase. For that reason, I think it's a mistake to start editing prose and the spec while a PRD is still in a proposed state. Instead, everything should be kept here. That means that proposed requirements should be diffed against those that exist already, but [Tracey already supports this](https://tracey.bearcove.eu/guide/writing-specs/#versioning). Obviously we'll need some reasonable way to check whether requirements are actually new or updates, and we'll have to start with fresh prose, but a PRD really needs to be "here's a problem, here's how we're going to solve it", not ", but you also need to look around the other updated files in this repo for a reasonable diff.". Now, I am happy with a PRD going stale once it's been completed, that's to be expected.
+
+> [!question] This is another question that is really a note. IMO this PRD has jumped the gun somewhat, and I'm not sure whether we should start an entirely new PRD (because there's value in what's here), but, stressing again that a PRD should be a complete view of the world, I think the first stage of a PRD is to write the prose from which we create a spec. All the code that's here today is premature because we haven't yet nailed down the spec, and we haven't nailed down the spec because we're still talking about the process. So a new PRD should start with a problem statement (I'm fine with it referencing code that already exists, that's not a problem, so `## The problem` right below here is fine). But then `## The code`---I don't think that should event exist yet. Otherwise I'm going to review code and we'll immediately realise a misunderstanding about the spec and have to start again. Now, obviously this is going to be an iterative process, and a certain amount of that is inevitable, but we should start at a high level. Continuing on from _that_ idea, a PRD does not need to be an exhaustive review of every single piece of code that we're going to write--if there're data model changes then I absolutely want to see those, but code that doesn't impl some requirement (like `changes::at`), what is that even doing there? And even if code _does_ impl some requirement I'm not sure that anything more than the signature needs to be there anyway. (I feel less strongly about that.) See the new lifecycle section below.
+
+## The lifecycle of a PRD
+
+1. A PRD begins because we want to make some change to the codebase to add a feature, fix a bug, or whatever.
+2. We begin with a problem statement, and then we define the solution scope in prose. At this early stage
+   we also begin to document facts and terms that are useful to the rest of the PRD. We do this before we
+   write the spec and certainly any code (besides perhaps some very rough examples that aren't even proposals)
+3. Once we have the prose agreed, we try to write a spec from it. In all probablity this will mean jumping
+   back and forth between the prose and the spec until we feel like we've got a reasonable spec from which we
+   can begin to work.
+4. Only after this do we start fleshing out both the structure of the code and the tests that will support it.
+   A PRD does not need to, and indeed should _not_, provide the exhaustive detail of the plan for each code
+   fragment we're going to need in the codebase.
+5. Once it's written proper, we start work on the actual codebase, and the PRD can be updated
+   with references to the actual symbols in the code using the tools that `codewalk` provides.
+
+It's inevitable that at each stage past (1) we will loop back and iterate, but starting with a full PRD
+of proposed code doesn't make sense.
+
+Additionally, besides the standardised changelog actions we have in the questions and answers, we can
+just add stuff to the changelog as we see fit.
 
 ## The problem
 
@@ -605,6 +621,8 @@ def test_a_prds_page_shows_its_spec_changes(repo):
 > all settled. Should `sources` include `tests/**/*.py`? Test names are long and unique,
 > so they won't make other names ambiguous, but every walkthrough would then be able to
 > show tests, which may be what we want anyway.
+>
+> [!answer] @matthew: Yes, `sources` should include `tests/` by default for Python projects.
 
 ## Questions
 
@@ -623,18 +641,32 @@ def test_a_prds_page_shows_its_spec_changes(repo):
 > [[Context]] for each worktree, under `/prd/<name>/`, which keeps one address but means
 > every link and request in the pages, all written from the root now, has to carry the
 > prefix. I've proposed the first. Is several ports all right?
+>
+> [!answer] @matthew: Here's a long-winded answer. Generally, I don't use Claude Code tied to a GitHub repo as we're doing here, and much of the work I do precludes it (where we work on multiple repos at once across services, infra, databases, tool crates and packages, etc).
+>
+> In addition, running `codewalk context` is going to do exactly nothing, in spite of my saving this file, until I've committed and pushed it up to GitHub.
+>
+> Furthermore, and probably most importantly, Claude Code running autonomously on its own server to which I have no access and can't review code is exactly the kind of thing that `codewalk` is _not_ built to solve. It's meant for a much more code review and iteration process. Essentially I'd think of it like a live GitHub PR, where instead of commits and comments being separate (or at least difficult to understand what's going on), the codewalk is the story of the code.
+>
+> In summary, I don't think we should try to solve this problem, except to say that `codewalk` is really designed for local use: run the server on your local machine, have CC attached to the dir, and iterate together. This reduces pain and maximises throughput, which is exactly what we're after.
+>
+> Obviously we're currently running this remotely (and now that I think of it, what does it mean to have 'a server for each worktree' in this context????), but I'm going to move to local dev ASAP.
 
 > [!question] @claude: Nothing tells the agent the person has done something: after
 > answering in the browser, they say "carry on" in the agent's application, and the agent
 > reads `codewalk context`. That's simple and keeps the person in charge of when the agent
 > works. Should codewalk do more, say `codewalk context --wait`, which returns once a
 > person's note changes what's in hand, so an agent can sit waiting for the next answer?
+>
+> [!answer] @matthew: Let's KISS and iterate as we need.
 
 > [!question] @claude: Once the branch is merged, its base has its changes, so the merge
 > base is the branch's own last commit and the list is empty. That's right while the PRD
 > is open, but afterwards it's the record of what it changed. Should merging (or settling
 > the last proposal) write the merge base into the front matter as `base_commit`, so the
 > list keeps working against that commit, or is the git history enough by then?
+>
+> [!answer] @matthew: I am so confused by this question.
 
 > [!question] @claude: Some of this changes code that exists: [[cli::new]] gains
 > `--base`, [[SpecIndex::refresh]] and [[Glossary::refresh]] call the new `parse`
@@ -643,6 +675,10 @@ def test_a_prds_page_shows_its_spec_changes(repo):
 > changes in prose instead. Should a proposal for a name that exists show its draft as a
 > diff against the code as it is, and count as proposed until the code matches the draft
 > or it's settled?
+>
+> [!answer] @matthew: > Should a proposal for a name that exists show its draft as a diff against the code as it is, and count as proposed until the code matches the draft or it's settled?
+>
+> Yes, exactly that, that makes sense to me.
 
 ## What writing it showed
 
@@ -673,3 +709,9 @@ the tool fall short:
 - **One branch, one PRD.** This one is on a branch that carries other work too (the
   glossary's move into the specs), so its changes against `main` would include that work.
   That's how this one was written, not how it should be: a PRD's branch should be its own.
+
+## Changelog
+
+What was asked here and how it was settled, newest first.
+
+- 2026-11-07: **note** @claude: The first PRD, written mostly by hand, to find out how writing one should go. → **note** @matthew: The entire process should run through the UI, in concert with an agent like Claude running in its own application alongside.
