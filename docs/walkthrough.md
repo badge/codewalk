@@ -167,22 +167,6 @@ Walk::_collect
 Walk::_resolve
 ```
 
-> [!question] @matthew: I think the `kind` and `type`s throughout here are coming straight from `markdown_it`, and so we can't turn them into enums?
->
-> Also, I clicked "Ask" on the `_collect` symbol's block, above, but this has appeared below `_resolve`, which is below it. I think that needs resolving.
->
-> [!answer] @claude: Half and half. `tok.type` and `tok.tag` are markdown-it's: strings
-> it makes up as it parses (`fence`, `paragraph_open`, `h2`), with no enum of its own, so
-> wrapping them would mean keeping a copy of its token list in step with it. The `kind`s
-> that are codewalk's own are already closed sets, as `Literal`s, which Pydantic checks
-> and a type checker narrows: `Ref.kind`, `Problem.severity`, `Note.kind`,
-> `Citation.state`. A `StrEnum` would add a name to import and nothing else, so I'd keep
-> them as they are.
->
-> The Ask was a real bug: a question always went after the whole `walk` block. Asking
-> about one reference of several now splits the block under it, so the question sits
-> under what it's about (`notes::ask_about`). This one I've left where it is.
-
 Front matter is YAML, read into [[FrontMatter]]. Everything in it is optional, and keys
 it doesn't know are kept rather than refused, since other tools keep their own keys in
 front matter too (the spec's weights, say).
@@ -598,22 +582,9 @@ def uses(self, ctx: Context, sym: Symbol) -> list[tuple[str, int]]:
     return out
 ```
 
-> [!question] @claude: Parsing every walkthrough on each call is fine for two, but not
-> for fifty. Should the library keep an index from symbol to references, rebuilt when a
-> walkthrough changes, or is that premature until there are more walkthroughs?
->
-> [!question] @matthew: That makes sense. I think it's reasonable to assume:
-> - One codewalk instance per project
-> - Each project is a git repo
->
-> As a result, I would probably create a `.codewalk/` dir in the repo root (add it to `.gitignore` or not? I'm not sure), and store a little sqlite DB in there to track this kind of stuff).
->
-> [!answer] @claude: Agreed on both assumptions, and on `.codewalk/` with SQLite (the
-> standard library's, so nothing new to install). I'd ignore it in git: everything in it
-> is worked out from files that are committed, so it can always be rebuilt, and a binary
-> file that changes on every read would conflict in every branch. Review state is
-> different, since it's a record of what people did and can't be rebuilt, so
-> `codewalk.review.json` stays where it is, committed. `codewalk init` would add
-> `.codewalk/` to `.gitignore`. In the DB: one row for each reference (walkthrough, line,
-> symbol's file and span, requirement), rewritten for a walkthrough when its mtime moves,
-> which is what `uses` reads.
+## Changelog
+
+What was asked here and how it was settled, newest first.
+
+- 2026-11-07 (`Library::uses`): **question** @claude: Parsing every walkthrough on each call is fine for two, but not for fifty. → **answer** @claude: Agreed on both assumptions, and on `.codewalk/` with SQLite (the standard library's, so nothing new to install). (1 more note)
+- 2026-11-07 (`Walk::_collect`, `Walk::_resolve`): **question** @matthew: I think the `kind` and `type`s throughout here are coming straight from `markdown_it`, and so we can't turn them into enums? → **answer** @claude: Half and half.
