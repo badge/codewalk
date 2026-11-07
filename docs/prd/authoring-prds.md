@@ -1,6 +1,6 @@
 ---
 title: "Authoring PRDs"
-summary: "A PRD is a walkthrough and a branch: the spec is changed where it lives, and codewalk shows what the PRD changes in it against its base."
+summary: "A PRD is started in the browser and written there with an agent alongside, on a branch of its own, with the spec changed where it lives and what it changes shown against its base."
 kind: prd
 base: main
 tags: [prd, spec]
@@ -13,6 +13,10 @@ related: ["../walkthrough.md"]
 > should go. It's a PRD about PRDs: the process it settles on is the one it was written
 > with, and what was awkward along the way is at the end, under
 > [what writing it showed](#what-writing-it-showed).
+>
+> [!note] @matthew: The entire process should run through the UI, in concert with an
+> agent like Claude running in its own application alongside. So we should be able to
+> start a PRD from the UI.
 
 ## The problem
 
@@ -26,7 +30,12 @@ FrontMatter::kind
 Walk::progress
 ```
 
-What it doesn't say is where the PRD's change to the spec goes. Few changes are
+That's for someone at a terminal. The process is meant to run in the browser, with a
+person reading, asking and deciding there and an agent beside it in its own application
+doing the writing, and the browser can read, answer, settle, review and reconcile, but it
+can't start a PRD: the index has no way to.
+
+Nor does codewalk say where the PRD's change to the spec goes. Few changes are
 standalone: most change what the spec already says as much as they add to it. The
 template's "What the spec says" section has the prose drafted inside the PRD, and the
 requirements cited as `[[r:new.id]]` until someone writes them into the spec, so until
@@ -46,7 +55,8 @@ There are two ways to fix that:
    unchanged, and git does the merging. What's lost is a view of *what the PRD changes*:
    on the branch, the spec just is what it will be.
 
-This PRD takes the second, and adds the missing view.
+This PRD takes the second, and adds the missing view, and starts the branch for you when
+you start the PRD in the browser.
 
 > [!question] @claude: The branch is what I've written the spec for, in
 > [the PRDs spec](../spec/prds.md). The case for the folder is that it's cheaper to
@@ -57,6 +67,10 @@ This PRD takes the second, and adds the missing view.
 
 ## The outcome
 
+- A person starts a PRD from the index, with **New PRD**: a title and what they want.
+  codewalk starts its branch, writes the walkthrough with what they want as a standing
+  request, and opens it; the agent, asked to carry on, finds the request in
+  `codewalk context` and writes the first draft, which appears on the page as it's saved.
 - [[t:prd]]s are written on a branch, with the spec changed in place: the
   [process](../spec/prds.md#writing-one) is in the spec, so an agent asked to write one
   follows it.
@@ -75,12 +89,145 @@ PRDs will: the definition of a PRD moves out of
 about a PRD's progress is reworded around the walkthrough rather than the PRD. The
 requirements:
 
-- [[r:prd.new]]: `codewalk new --prd` records the base.
+- [[r:prd.new]]: starting one, from the index or the command line, writes the template,
+  with its base and no placeholders.
+- [[r:prd.branch]]: starting one from the index starts its branch, and won't with
+  uncommitted work in the way.
+- [[r:prd.ask]]: what the person asked for goes in as a standing request.
 - [[r:prd.base]]: changes are worked out against the merge base.
 - [[r:prd.changes]]: `codewalk changes` lists them.
 - [[r:prd.view]]: and the PRD's page shows them.
 
+And one change to an existing requirement: [[r:serve.local]] said the server writes only
+walkthroughs and the review file. It now says it writes specs too (it always has, from the
+editor), and that the only change it makes to git is starting a PRD's branch.
+
 ## The code
+
+### Starting one
+
+One function starts a PRD, for the index and for `codewalk new --prd` alike. From the
+browser it's given what the person wants, and then it also starts the branch, refusing
+rather than carrying uncommitted work onto it:
+
+```walk proposed python
+prd::start
+# r[impl prd.new]
+# r[impl prd.branch]
+# r[impl prd.ask]
+def start(ctx: Context, title: str, ask: str | None = None, base: str | None = None, path: str | None = None) -> str:
+    """Start a PRD: its walkthrough and, from the browser, its branch and what was asked.
+
+    Parameters
+    ----------
+    ctx : Context
+        The project.
+    title : str
+        Its title.
+    ask : str or None
+        What the person wants, in their words. Given from the browser, which starts the
+        PRD's branch too; None from the command line, which leaves the branch to whoever
+        ran it.
+    base : str or None
+        The branch it will be merged into; else the repository's default branch.
+    path : str or None
+        Where to write it, from the root; else `docs/prd/` and the title's slug.
+
+    Returns
+    -------
+    str
+        The walkthrough's path, from the root.
+
+    Raises
+    ------
+    FileExistsError
+        If the walkthrough, or the branch it would start, exists already.
+    RuntimeError
+        If it would start a branch and the working tree has uncommitted changes.
+    """
+    base = base or default_branch(ctx.root)
+    rel = path or f"docs/prd/{slug(title)}.md"
+    if (ctx.root / rel).exists():
+        raise FileExistsError(rel)
+    author = ctx.config.who(ctx.root) or "you"
+    if ask is not None:
+        branch = f"prd/{slug(title)}"
+        if git(ctx.root, "status", "--porcelain"):
+            raise RuntimeError("there are uncommitted changes: commit or stash them, then start it")
+        if git(ctx.root, "branch", "--list", branch):
+            raise FileExistsError(f"the branch {branch}")
+        git(ctx.root, "switch", "--create", branch, base, check=True)
+    text = TEMPLATE.read_text()
+    for key, value in {"title": title, "author": author, "base": base}.items():
+        text = text.replace("{" + key + "}", value)
+    if ask:
+        text = notes.request(text, author, ask)
+    (ctx.root / rel).parent.mkdir(parents=True, exist_ok=True)
+    (ctx.root / rel).write_text(text)
+    return rel
+```
+
+[[cli::new]] calls it with `--base` and its path; the browser calls it through the
+server, which reloads its view of the project, since the branch it's on just changed:
+
+```walk proposed python
+App::start_prd
+# r[impl serve.local]
+def start_prd(self, title: str, ask: str, base: str | None = None) -> dict:
+    """Start a PRD from the index, and say where to open it."""
+    rel = prd.start(self.ctx, title, ask=ask, base=base)
+    self.ctx.refresh()
+    return {"started": rel, "href": f"/walk/{rel}"}
+```
+
+The route, `POST /api/prd`, answers a refusal with 409 and its reason, which the form shows
+where you typed. The form is on the index, beside its heading: a title, what you want
+(several lines), and the base, filled in with the default branch. Starting it opens the
+PRD, where the request sits at the top until the agent's first draft arrives around it.
+
+Three small pieces:
+
+```walk proposed python
+prd::slug
+def slug(title: str) -> str:
+    """A title as a file or branch name: lower case, words joined by hyphens."""
+    return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+```
+
+```walk proposed python
+prd::git
+def git(root: Path, *args: str, check: bool = False) -> str:
+    """What a git command prints, run at `root`."""
+    return subprocess.run(["git", *args], capture_output=True, text=True, cwd=root, check=check).stdout.strip()
+```
+
+```walk proposed python
+notes::request
+def request(text: str, author: str | None, body: str) -> str:
+    """`text` with a standing request under its first heading, where it's read first."""
+    lines = text.split("\n")
+    at = next((i + 1 for i, line in enumerate(lines) if line.startswith("# ")), 0)
+    return "\n".join(lines[:at] + ["", *_quote("request", author, body)] + lines[at:])
+```
+
+The template loses its sample `walk proposed` block and sample question, which counted as
+work in hand from the moment it was written, for HTML comments saying what goes in each
+section, and gains `base: "{base}"` in its front matter, which [[FrontMatter]] reads:
+
+```walk proposed python
+FrontMatter::base
+    # For a PRD: the branch it will be merged into. What it changes in the spec is worked
+    # out against where its branch left this one
+    base: str | None = None
+```
+
+```walk proposed python
+config::default_branch
+def default_branch(root: Path) -> str:
+    """The branch `origin/HEAD` points at, else `main`."""
+    out = subprocess.run(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], capture_output=True, text=True, cwd=root)
+    return out.stdout.strip().removeprefix("origin/") or "main"
+```
 
 ### Reading the spec as it was
 
@@ -152,27 +299,7 @@ def parse(rel: str, text: str) -> list[Definition]:
     return out
 ```
 
-### The base
-
-A PRD names the branch it will be merged into. `codewalk new --prd` fills it in, from
-`--base` or the branch `origin/HEAD` points at, through a `{base}` placeholder in the
-template beside `{title}` and `{author}`:
-
-```walk proposed python
-FrontMatter::base
-    # For a PRD: the branch it will be merged into. What it changes in the spec is worked
-    # out against where its branch left this one
-    base: str | None = None
-```
-
-```walk proposed python
-config::default_branch
-# r[impl prd.new]
-def default_branch(root: Path) -> str:
-    """The branch `origin/HEAD` points at, else `main`."""
-    out = subprocess.run(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], capture_output=True, text=True, cwd=root)
-    return out.stdout.strip().removeprefix("origin/") or "main"
-```
+### Where the branch left its base
 
 What's compared against isn't the base as it is now, which moves as other work is merged,
 but the commit where this branch left it, so a PRD shows only its own changes:
@@ -379,6 +506,26 @@ def test_a_prds_spec_changes_are_against_where_its_branch_left_its_base(repo):
 ```
 
 ```walk proposed python
+test_starting_a_prd_from_the_index_starts_its_branch_with_what_was_asked
+# r[verify prd.branch]
+# r[verify prd.ask]
+def test_starting_a_prd_from_the_index_starts_its_branch_with_what_was_asked(repo, client):
+    git(repo, "init", "-b", "main")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", "the base")
+    r = client.post("/api/prd", json={"title": "Stop a battery", "ask": "Batteries need stopping."})
+    assert r.json() == {"started": "docs/prd/stop-a-battery.md", "href": "/walk/docs/prd/stop-a-battery.md"}
+    assert git(repo, "branch", "--show-current") == "prd/stop-a-battery"
+    w = Walk(ctx(repo), "docs/prd/stop-a-battery.md")
+    assert [(t.notes[0].kind, t.open) for t in w.threads] == [("request", True)]
+    assert w.progress().proposed == 0
+    # Again, with the branch there and work uncommitted: refused, and nothing written
+    (repo / "docs/spec/spec.md").write_text(SPEC + "\nMore.\n")
+    assert client.post("/api/prd", json={"title": "Other", "ask": "Something."}).status_code == 409
+    assert not (repo / "docs/prd/other.md").exists() and git(repo, "branch", "--show-current") == "prd/stop-a-battery"
+```
+
+```walk proposed python
 test_a_prd_names_its_base
 # r[verify prd.new]
 def test_a_prd_names_its_base(repo, monkeypatch):
@@ -408,6 +555,19 @@ def test_a_prds_page_shows_its_spec_changes(repo):
 
 ## Questions
 
+> [!question] @claude: Starting a PRD switches the checkout to its branch, and the agent
+> works in the same checkout, so it's then on the PRD's branch too, which is what we want.
+> But it means one PRD at a time per checkout, and starting one is refused while anything
+> is uncommitted, including the agent's work on another. Is one at a time right for now,
+> or should each PRD get a `git worktree` of its own, with `codewalk serve` able to show
+> several?
+
+> [!question] @claude: Nothing tells the agent the person has done something: after
+> answering in the browser, they say "carry on" in the agent's application, and the agent
+> reads `codewalk context`. That's simple and keeps the person in charge of when the agent
+> works. Should codewalk do more, say `codewalk context --wait`, which returns once a
+> person's note changes what's in hand, so an agent can sit waiting for the next answer?
+
 > [!question] @claude: Once the branch is merged, its base has its changes, so the merge
 > base is the branch's own last commit and the list is empty. That's right while the PRD
 > is open, but afterwards it's the record of what it changed. Should merging (or settling
@@ -427,6 +587,9 @@ def test_a_prds_page_shows_its_spec_changes(repo):
 Writing this by hand, rather than through the skills, turned up where the process and
 the tool fall short:
 
+- **The browser can't start one.** Everything else a person does to a PRD (asking,
+  answering, settling, reviewing, reconciling) is in the browser already; starting it
+  wasn't, which is now [[?prd::start]] and [[?App::start_prd]].
 - **The process wasn't written down.** Where a PRD's spec goes was the first thing to
   decide; it's now [in the spec](../spec/prds.md#where-a-prd-lives), and the
   `codewalk-propose` skill and the template should point to it.

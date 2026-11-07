@@ -12,6 +12,16 @@ the change is made it stays, as the record of what was planned beside what was b
 A PRD is two things: a walkthrough, with `kind: prd`, that says why and proposes the code;
 and the change it makes to the spec, made in the spec itself, on a branch of its own.
 
+### Two people, one in the browser
+
+A PRD is written by a person in the browser and an agent beside it, in its own
+application, working on the same files. Neither waits on the other through anything but
+the Markdown: the person asks, answers and decides in notes, the agent reads what's in
+hand with `codewalk context`, and writes the spec, the proposals and its own questions,
+and the page keeps up as it does. So everything a person does to a PRD, from starting one
+to agreeing it, is done in the browser, and everything the agent needs to know is in the
+files.
+
 ### Where a PRD lives
 
 Most changes aren't standalone: they change what the spec already says as much as they
@@ -23,11 +33,23 @@ branch is always the spec as it will be, so it's read and reviewed the same way 
 spec on the base, and two PRDs that disagree about it meet as a conflict when the second
 is merged, which is when they should.
 
-The walkthrough goes in `docs/prd/`, where it stays once the branch is merged. It's
-started with `codewalk new PATH --title T --prd`, which names the branch it will be merged
-into, its base, in its front matter (`prd.new`).
+The walkthrough goes in `docs/prd/`, where it stays once the branch is merged.
+
+### Starting one
+
+A person starts a PRD from the index, with **New PRD**: a title, and what they want, in
+their own words. codewalk writes the walkthrough at `docs/prd/` and the title as a slug,
+naming in its front matter the branch it will be merged into, its base (`prd.new`), and
+starts its branch, `prd/` and the slug, from the base, so the work on it is its own
+(`prd.branch`). What they want goes in as a standing request from them, at the top, so
+it's the first thing `codewalk context` gives the agent (`prd.ask`), and the PRD opens in
+the browser for the agent's first draft to appear in. An agent, or anyone at a terminal,
+can do the same with `codewalk new PATH --title T --prd`.
 
 ### Writing one
+
+Once it's started, the agent drafts, the person reads and answers, and the agent
+revises, until the PRD is agreed. It covers:
 
 1. **The problem**, naming the code it's about as it stands, and **the outcome**: what's
    true once it's done, in terms someone could check.
@@ -37,9 +59,11 @@ into, its base, in its front matter (`prd.new`).
 3. **The code.** Each new piece drafted in a `walk proposed` block under the name it will
    have, with the requirement markers it will carry, so the margin ties it to its
    requirement and the requirement to its prose. Tests the same way.
-4. **Questions,** asked where they arise, and answered there, until the PRD is agreed.
+4. **Questions,** asked where they arise, and answered there, until the PRD is agreed:
+   the person says so with a decision under the standing request.
 5. **The work.** Writing the code settles each proposal; tracey says when every
-   requirement is implemented and verified; then the branch is merged.
+   requirement is implemented and verified; the agent marks the request done, and the
+   branch is merged.
 
 ### Seeing what it changes
 
@@ -64,9 +88,20 @@ the spec is worked out against the commit where its branch left the base.
 ## Requirements
 
 r[prd.new]
-`codewalk new PATH --title T --prd` MUST write the PRD template at PATH, with `kind: prd`
-and `base` in its front matter: the branch given by `--base`, or else the repository's
-default branch.
+Starting a PRD, from the index or with `codewalk new PATH --title T --prd`, MUST write the
+PRD template, at `docs/prd/` and the title's slug from the index or at PATH, with
+`kind: prd`, the title, and `base` in its front matter: the base given, or else the
+repository's default branch. The template MUST NOT contain proposals or notes of its own.
+
+r[prd.branch]
+Starting a PRD from the index MUST create its branch, `prd/` and the slug, from its base,
+and switch to it, before writing the walkthrough; and MUST refuse, writing nothing, if
+the working tree has uncommitted changes or the branch exists.
+
+r[prd.ask]
+What the person wants, given when starting a PRD from the index, MUST be written at the
+top of the walkthrough as a `[!request]` signed as them, so the PRD is in hand until it's
+done.
 
 r[prd.base]
 A PRD's changes to the spec MUST be worked out against the merge base of its `base` and
