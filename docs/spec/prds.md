@@ -10,7 +10,8 @@ written to be argued with, so it's where the questions are asked and answered, a
 the change is made it stays, as the record of what was planned beside what was built.
 
 A PRD is two things: a walkthrough, with `kind: prd`, that says why and proposes the code;
-and the change it makes to the spec, made in the spec itself, on a branch of its own.
+and the change it makes to the spec, made in the spec itself, on a branch of its own,
+checked out in a worktree of its own.
 
 ### Two people, one in the browser
 
@@ -33,18 +34,29 @@ branch is always the spec as it will be, so it's read and reviewed the same way 
 spec on the base, and two PRDs that disagree about it meet as a conflict when the second
 is merged, which is when they should.
 
+Each PRD's branch is checked out in a git worktree of its own, so starting one leaves the
+checkout you're in as it is, uncommitted work and all, and several PRDs can be open at
+once, each with its own agent working in its own folder. The worktrees are under
+`.codewalk/worktrees/`, which git ignores, one folder for each PRD, named for its slug.
+
 The walkthrough goes in `docs/prd/`, where it stays once the branch is merged.
 
 ### Starting one
 
 A person starts a PRD from the index, with **New PRD**: a title, and what they want, in
 their own words. codewalk writes the walkthrough at `docs/prd/` and the title as a slug,
-naming in its front matter the branch it will be merged into, its base (`prd.new`), and
-starts its branch, `prd/` and the slug, from the base, so the work on it is its own
-(`prd.branch`). What they want goes in as a standing request from them, at the top, so
-it's the first thing `codewalk context` gives the agent (`prd.ask`), and the PRD opens in
-the browser for the agent's first draft to appear in. An agent, or anyone at a terminal,
-can do the same with `codewalk new PATH --title T --prd`.
+naming in its front matter the branch it will be merged into, its base (`prd.new`). It
+starts the branch, `prd/` and the slug, from the base, in a new worktree, and writes the
+walkthrough there (`prd.worktree`). What they want goes in as a standing request from
+them, at the top, so it's the first thing `codewalk context` gives the agent
+(`prd.ask`).
+
+The PRD then opens in the browser, served from its worktree, with where the worktree is
+and a line to give the agent: to work in that folder, and start from `codewalk context`.
+The index lists every PRD open in a worktree, and opens each from its own
+(`prd.serve`). An agent, or anyone at a terminal, can start one with
+`codewalk new PATH --title T --prd`, which writes the walkthrough where it's run and leaves
+branches and worktrees to them.
 
 ### Writing one
 
@@ -93,10 +105,16 @@ PRD template, at `docs/prd/` and the title's slug from the index or at PATH, wit
 `kind: prd`, the title, and `base` in its front matter: the base given, or else the
 repository's default branch. The template MUST NOT contain proposals or notes of its own.
 
-r[prd.branch]
+r[prd.worktree]
 Starting a PRD from the index MUST create its branch, `prd/` and the slug, from its base,
-and switch to it, before writing the walkthrough; and MUST refuse, writing nothing, if
-the working tree has uncommitted changes or the branch exists.
+checked out in a new worktree at `.codewalk/worktrees/` and the slug, and MUST write the
+walkthrough in that worktree, leaving the current checkout as it is. It MUST refuse,
+writing nothing, if the branch or the worktree exists.
+
+r[prd.serve]
+The index MUST list each PRD open in a worktree under `.codewalk/worktrees/`, and opening
+one MUST show it as read and written in its worktree, with the worktree's path and a line
+for the agent naming it.
 
 r[prd.ask]
 What the person wants, given when starting a PRD from the index, MUST be written at the

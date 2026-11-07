@@ -55,8 +55,9 @@ There are two ways to fix that:
    unchanged, and git does the merging. What's lost is a view of *what the PRD changes*:
    on the branch, the spec just is what it will be.
 
-This PRD takes the second, and adds the missing view, and starts the branch for you when
-you start the PRD in the browser.
+This PRD takes the second, and adds the missing view. Starting a PRD in the browser starts
+its branch for you, in a git worktree of its own, so the checkout you're in is left alone
+and several PRDs can be open at once, each with its own agent.
 
 > [!question] @claude: The branch is what I've written the spec for, in
 > [the PRDs spec](../spec/prds.md). The case for the folder is that it's cheaper to
@@ -68,9 +69,11 @@ you start the PRD in the browser.
 ## The outcome
 
 - A person starts a PRD from the index, with **New PRD**: a title and what they want.
-  codewalk starts its branch, writes the walkthrough with what they want as a standing
-  request, and opens it; the agent, asked to carry on, finds the request in
-  `codewalk context` and writes the first draft, which appears on the page as it's saved.
+  codewalk starts its branch in a new worktree, writes the walkthrough there with what
+  they want as a standing request, and opens it, with a line to give the agent: work in
+  that folder, starting from `codewalk context`. The agent writes the first draft, which
+  appears on the page as it's saved.
+- The index lists every PRD open in a worktree, and opens each from its own.
 - [[t:prd]]s are written on a branch, with the spec changed in place: the
   [process](../spec/prds.md#writing-one) is in the spec, so an agent asked to write one
   follows it.
@@ -91,8 +94,9 @@ requirements:
 
 - [[r:prd.new]]: starting one, from the index or the command line, writes the template,
   with its base and no placeholders.
-- [[r:prd.branch]]: starting one from the index starts its branch, and won't with
-  uncommitted work in the way.
+- [[r:prd.worktree]]: starting one from the index starts its branch in a worktree of its
+  own, leaving the checkout you're in alone.
+- [[r:prd.serve]]: the index lists PRDs open in worktrees, and opens each from its own.
 - [[r:prd.ask]]: what the person asked for goes in as a standing request.
 - [[r:prd.base]]: changes are worked out against the merge base.
 - [[r:prd.changes]]: `codewalk changes` lists them.
@@ -100,23 +104,27 @@ requirements:
 
 And one change to an existing requirement: [[r:serve.local]] said the server writes only
 walkthroughs and the review file. It now says it writes specs too (it always has, from the
-editor), and that the only change it makes to git is starting a PRD's branch.
+editor), in a PRD's worktree as well as its own checkout, and that the only change it makes
+to git is adding a PRD's worktree.
 
 ## The code
 
 ### Starting one
 
 One function starts a PRD, for the index and for `codewalk new --prd` alike. From the
-browser it's given what the person wants, and then it also starts the branch, refusing
-rather than carrying uncommitted work onto it:
+browser it's given what the person wants, and then it also starts the branch, in a
+worktree under `.codewalk/worktrees/`, and writes the walkthrough there. The checkout
+it's run from isn't touched, so there's nothing to refuse over but the branch or the
+worktree being there already. (`.codewalk/` is ignored by git: `codewalk init` adds it to
+`.gitignore`, as [codewalk, walked through](../walkthrough.md) decided for its index.)
 
 ```walk proposed python
 prd::start
 # r[impl prd.new]
-# r[impl prd.branch]
+# r[impl prd.worktree]
 # r[impl prd.ask]
-def start(ctx: Context, title: str, ask: str | None = None, base: str | None = None, path: str | None = None) -> str:
-    """Start a PRD: its walkthrough and, from the browser, its branch and what was asked.
+def start(ctx: Context, title: str, ask: str | None = None, base: str | None = None, path: str | None = None) -> Path:
+    """Start a PRD: its walkthrough and, from the browser, its worktree and what was asked.
 
     Parameters
     ----------
@@ -126,8 +134,8 @@ def start(ctx: Context, title: str, ask: str | None = None, base: str | None = N
         Its title.
     ask : str or None
         What the person wants, in their words. Given from the browser, which starts the
-        PRD's branch too; None from the command line, which leaves the branch to whoever
-        ran it.
+        PRD's branch and worktree too; None from the command line, which leaves those to
+        whoever ran it.
     base : str or None
         The branch it will be merged into; else the repository's default branch.
     path : str or None
@@ -135,50 +143,91 @@ def start(ctx: Context, title: str, ask: str | None = None, base: str | None = N
 
     Returns
     -------
-    str
-        The walkthrough's path, from the root.
+    Path
+        The walkthrough: in the new worktree, from the browser.
 
     Raises
     ------
     FileExistsError
-        If the walkthrough, or the branch it would start, exists already.
-    RuntimeError
-        If it would start a branch and the working tree has uncommitted changes.
+        If the walkthrough, or the branch or worktree it would start, exists already.
     """
     base = base or default_branch(ctx.root)
-    rel = path or f"docs/prd/{slug(title)}.md"
-    if (ctx.root / rel).exists():
+    name = slug(title)
+    rel = path or f"docs/prd/{name}.md"
+    root = ctx.root
+    if ask is not None:
+        branch, root = f"prd/{name}", ctx.root / WORKTREES / name
+        if git(ctx.root, "branch", "--list", branch) or root.exists():
+            raise FileExistsError(f"the branch {branch}, or its worktree")
+        git(ctx.root, "worktree", "add", "-b", branch, str(root), base, check=True)
+    target = root / rel
+    if target.exists():
         raise FileExistsError(rel)
     author = ctx.config.who(ctx.root) or "you"
-    if ask is not None:
-        branch = f"prd/{slug(title)}"
-        if git(ctx.root, "status", "--porcelain"):
-            raise RuntimeError("there are uncommitted changes: commit or stash them, then start it")
-        if git(ctx.root, "branch", "--list", branch):
-            raise FileExistsError(f"the branch {branch}")
-        git(ctx.root, "switch", "--create", branch, base, check=True)
     text = TEMPLATE.read_text()
     for key, value in {"title": title, "author": author, "base": base}.items():
         text = text.replace("{" + key + "}", value)
     if ask:
         text = notes.request(text, author, ask)
-    (ctx.root / rel).parent.mkdir(parents=True, exist_ok=True)
-    (ctx.root / rel).write_text(text)
-    return rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text)
+    return target
 ```
 
 [[cli::new]] calls it with `--base` and its path; the browser calls it through the
-server, which reloads its view of the project, since the branch it's on just changed:
+server, and is sent on to the PRD, served from its worktree:
 
 ```walk proposed python
 App::start_prd
 # r[impl serve.local]
 def start_prd(self, title: str, ask: str, base: str | None = None) -> dict:
     """Start a PRD from the index, and say where to open it."""
-    rel = prd.start(self.ctx, title, ask=ask, base=base)
-    self.ctx.refresh()
-    return {"started": rel, "href": f"/walk/{rel}"}
+    target = prd.start(self.ctx, title, ask=ask, base=base)
+    return {"started": target.parent.parent.parent.name, "href": self.open_prd(target.parent.parent.parent.name)}
 ```
+
+### Serving a worktree
+
+The server reads one checkout: its [[Context]] is built for a root, and every page and
+every write goes through it. Rather than teach it to hold several, each worktree gets a
+server of its own, `codewalk serve` run in the worktree on a free port, started the
+first time it's opened and stopped with the server that started it. The index lists the
+PRDs git knows are checked out under `.codewalk/worktrees/`:
+
+```walk proposed python
+prd::worktrees
+# r[impl prd.serve]
+def worktrees(root: Path) -> dict[str, Path]:
+    """Each PRD open in a worktree under `.codewalk/worktrees/`, by its slug."""
+    out = {}
+    for block in git(root, "worktree", "list", "--porcelain").split("\n\n"):
+        fields = dict(line.split(" ", 1) for line in block.splitlines() if " " in line)
+        path = Path(fields.get("worktree", ""))
+        if path.parent == root / WORKTREES and fields.get("branch", "").startswith("refs/heads/prd/"):
+            out[path.name] = path
+    return out
+```
+
+```walk proposed python
+App::open_prd
+# r[impl prd.serve]
+def open_prd(self, name: str) -> str:
+    """Where a PRD is served from its worktree, starting a server there if none is running."""
+    running = self.prd_servers.get(name)
+    if running is None or running[0].poll() is not None:
+        path = prd.worktrees(self.ctx.root)[name]
+        port = free_port()
+        cmd = [sys.executable, "-m", "codewalk.cli", "serve", "--port", str(port)]
+        self.prd_servers[name] = running = (subprocess.Popen(cmd, cwd=path), port)
+    return f"http://127.0.0.1:{running[1]}/walk/docs/prd/{name}.md"
+```
+
+`GET /prd/{name}` redirects there, which is what the index's links are, so a worktree's
+server starts only when someone opens it; and the server's lifespan, on the way out,
+terminates each one it started. The PRD's page in its worktree says where the worktree
+is, with a button that copies the line for the agent: "Work in `<path>`: start with
+`codewalk context`."
+
 
 The route, `POST /api/prd`, answers a refusal with 409 and its reason, which the form shows
 where you typed. The form is on the index, beside its heading: a title, what you want
@@ -506,23 +555,27 @@ def test_a_prds_spec_changes_are_against_where_its_branch_left_its_base(repo):
 ```
 
 ```walk proposed python
-test_starting_a_prd_from_the_index_starts_its_branch_with_what_was_asked
-# r[verify prd.branch]
+test_starting_a_prd_from_the_index_gives_it_a_worktree_with_what_was_asked
+# r[verify prd.worktree]
 # r[verify prd.ask]
-def test_starting_a_prd_from_the_index_starts_its_branch_with_what_was_asked(repo, client):
+def test_starting_a_prd_from_the_index_gives_it_a_worktree_with_what_was_asked(repo):
+    from codewalk.walk import prd
+
     git(repo, "init", "-b", "main")
     git(repo, "add", "-A")
     git(repo, "commit", "-m", "the base")
-    r = client.post("/api/prd", json={"title": "Stop a battery", "ask": "Batteries need stopping."})
-    assert r.json() == {"started": "docs/prd/stop-a-battery.md", "href": "/walk/docs/prd/stop-a-battery.md"}
-    assert git(repo, "branch", "--show-current") == "prd/stop-a-battery"
-    w = Walk(ctx(repo), "docs/prd/stop-a-battery.md")
-    assert [(t.notes[0].kind, t.open) for t in w.threads] == [("request", True)]
-    assert w.progress().proposed == 0
-    # Again, with the branch there and work uncommitted: refused, and nothing written
-    (repo / "docs/spec/spec.md").write_text(SPEC + "\nMore.\n")
-    assert client.post("/api/prd", json={"title": "Other", "ask": "Something."}).status_code == 409
-    assert not (repo / "docs/prd/other.md").exists() and git(repo, "branch", "--show-current") == "prd/stop-a-battery"
+    (repo / "docs/spec/spec.md").write_text(SPEC + "\nUncommitted, and left alone.\n")
+    target = prd.start(ctx(repo), "Stop a battery", ask="Batteries need stopping.")
+    tree = repo / ".codewalk/worktrees/stop-a-battery"
+    assert target == tree / "docs/prd/stop-a-battery.md"
+    assert git(tree, "branch", "--show-current") == "prd/stop-a-battery"
+    assert git(repo, "branch", "--show-current") == "main" and "left alone" in (repo / "docs/spec/spec.md").read_text()
+    assert "left alone" not in (tree / "docs/spec/spec.md").read_text()
+    w = Walk(ctx(tree), "docs/prd/stop-a-battery.md")
+    assert [(t.notes[0].kind, t.request_open) for t in w.threads] == [("request", True)] and w.progress().proposed == 0
+    assert prd.worktrees(repo) == {"stop-a-battery": tree}
+    with pytest.raises(FileExistsError):
+        prd.start(ctx(repo), "Stop a battery", ask="Again.")
 ```
 
 ```walk proposed python
@@ -561,6 +614,15 @@ def test_a_prds_page_shows_its_spec_changes(repo):
 > is uncommitted, including the agent's work on another. Is one at a time right for now,
 > or should each PRD get a `git worktree` of its own, with `codewalk serve` able to show
 > several?
+>
+> [!decision] @matthew: Each PRD should get its own git worktree, that makes sense.
+
+> [!question] @claude: A server for each worktree, on its own port, means nothing in the
+> server changes: it's one checkout, as now. The cost is several processes, and a PRD's
+> address changing each time its server starts. The alternative is one server holding a
+> [[Context]] for each worktree, under `/prd/<name>/`, which keeps one address but means
+> every link and request in the pages, all written from the root now, has to carry the
+> prefix. I've proposed the first. Is several ports all right?
 
 > [!question] @claude: Nothing tells the agent the person has done something: after
 > answering in the browser, they say "carry on" in the agent's application, and the agent
@@ -590,6 +652,9 @@ the tool fall short:
 - **The browser can't start one.** Everything else a person does to a PRD (asking,
   answering, settling, reviewing, reconciling) is in the browser already; starting it
   wasn't, which is now [[?prd::start]] and [[?App::start_prd]].
+- **Agreeing wasn't in the browser either.** A proposal couldn't be agreed there, nor a
+  settled thread added to; both now can (`proposal.agree`, `note.add-settled`), and
+  `codewalk context` says which proposals are agreed.
 - **The process wasn't written down.** Where a PRD's spec goes was the first thing to
   decide; it's now [in the spec](../spec/prds.md#where-a-prd-lives), and the
   `codewalk-propose` skill and the template should point to it.
