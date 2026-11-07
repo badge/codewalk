@@ -240,29 +240,68 @@ wrong label.
 
 ### The data model
 
-A requirement and a trace each carry a version, and a requirement read from a PRD can be a
-removal:
+Each change to a class that exists is proposed as the whole class, so it's shown where it
+is, linked to its file, with the draft against it: the new fields are the added lines.
 
-```walk proposed python
-Requirement::version
+A requirement carries its version, and one read from a PRD can be a removal:
+
+```walk proposed change python
+Requirement
+class Requirement(BaseModel):
+    id: str
+    file: str
+    line: int
+    text: str
     # From `r[id+N]`; 1 without a suffix
     version: int = 1
-```
-
-```walk proposed python
-Requirement::removed
     # Only in a PRD: `r[id+N] removed`, a requirement it takes out of the spec
     removed: bool = False
 ```
 
+A trace carries the version it names:
+
 ```walk proposed change python
-Symbol::markers
+Symbol
+class Symbol(BaseModel):
+    """One thing a walkthrough can point at."""
+
+    qualified: str
+    kind: str
+    file: str
+    # 1-based, inclusive. `start` takes in its doc comments, attributes and markers
+    start: int
+    line: int
+    end: int
+    signature: str
+    doc: str
     # Requirement markers on it, `impl` or `verify`, with their IDs and the versions they
     # name, 1 without a suffix
     markers: list[tuple[str, str, int]] = []
+    # The rest of its documentation after the summary: for Python, a NumPy-style
+    # docstring's extended summary and sections (Parameters, Returns, …)
+    details: str = ""
+    # What `sig` shows, as runs of lines (1-based, inclusive), if more than its doc
+    # comments and first line: for Python, a def's header and docstring; a class's, with
+    # its fields and its `__init__`'s header and docstring
+    outline: list[tuple[int, int]] = []
+
+    @property
+    def name(self) -> str:
+        return self.qualified.rsplit("::", 1)[-1]
+
+    @property
+    def segments(self) -> list[str]:
+        return self.qualified.split("::")
+
+    def text(self, files: SourceFiles) -> str:
+        return "\n".join(files.lines(self.file)[self.start - 1 : self.end])
+
+    def digest(self, files: SourceFiles) -> str:
+        return hashlib.sha256(self.text(files).encode()).hexdigest()[:12]
 ```
 
-A PRD has a stage, and the index and `codewalk context` carry it:
+A PRD has a stage. The stages are a type of their own, in `codewalk/walk/doc.py` beside
+[[FrontMatter]], which reads it:
 
 ```walk proposed python
 doc::Stage
@@ -270,26 +309,108 @@ doc::Stage
 Stage = Literal["problem", "prose", "spec", "code", "work"]
 ```
 
-```walk proposed python
-FrontMatter::stage
+```walk proposed change python
+FrontMatter
+class FrontMatter(BaseModel):
+    """What a walkthrough says about itself, in YAML at its top.
+
+    All optional; anything else there is left alone, since other tools keep their own keys
+    in front matter.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    # Shown in place of the first heading
+    title: str | None = None
+    # A sentence or two, for the list of walkthroughs
+    summary: str | None = None
+    tags: list[str] = []
+    # Other walkthroughs to read with this one, as paths from this file. Linking to one
+    # in the text relates them too
+    related: list[str] = []
+    # What kind of walkthrough: "prd" for one that proposes a change to be made
+    kind: str | None = None
     # For a PRD: where it is in its lifecycle; at the problem if it isn't given
     stage: Stage | None = None
+    # Where it goes among the others in its folder: lighter first, then those without one,
+    # by title
+    weight: int | None = None
+
+    @field_validator("tags", "related", mode="before")
+    @classmethod
+    def _one_or_many(cls, v):
+        return [v] if isinstance(v, str) else v
 ```
 
-```walk proposed python
-Summary::stage
+The index's summary of a walkthrough, and `codewalk context`'s, carry it:
+
+```walk proposed change python
+Summary
+class Summary(BaseModel):
+    """One walkthrough, as the index shows it."""
+
+    rel: str
+    # From its front matter: where it goes in its folder
+    weight: int | None = None
+    title: str
+    summary: str | None
+    tags: list[str]
+    # Its folder, which is how the index groups walkthroughs
+    folder: str
+    # Other walkthroughs it links to, and that link to it, as paths from the root
+    links_to: list[str]
+    linked_from: list[str] = []
+    references: int
+    embedded: int
+    reviewed: int
+    broken: int
+    changed: int
+    # "prd", say, from its front matter
+    kind: str | None = None
     # For a PRD, its stage, from its front matter
     stage: Stage | None = None
+    # Its proposals: not written yet, written, settled
+    proposed: int = 0
+    written: int = 0
+    settled: int = 0
+
+    @property
+    def plan(self) -> int:
+        return self.proposed + self.written + self.settled
+
+    @property
+    def plan_status(self) -> str:
+        if not self.plan:
+            return ""
+        return "proposed" if self.proposed == self.plan else "done" if self.settled == self.plan else "in progress"
+
+    @property
+    def reviewed_pct(self) -> int:
+        return int(100 * self.reviewed / self.embedded) if self.embedded else 100
 ```
 
-```walk proposed python
-Brief::stage
+```walk proposed change python
+Brief
+class Brief(BaseModel):
+    walkthrough: str
+    title: str
     # For a PRD, its stage, and so what may be written in it yet
     stage: Stage | None = None
+    requests: list[Item] = []
+    questions: list[Item] = []
+    proposed: list[Item] = []
+    written: list[Item] = []
+    changed: list[Item] = []
+    broken: list[Item] = []
+
+    @property
+    def empty(self) -> bool:
+        return not (self.requests or self.questions or self.proposed or self.written or self.changed or self.broken)
 ```
 
 What a PRD proposes for the spec, each requirement, term or fact against the spec as it
-stands:
+stands, is a new model, in a new module for PRDs, `codewalk/walk/prd.py`, beside the
+walkthroughs it reads ([[Walk]]):
 
 ```walk proposed python
 prd::SpecChange
@@ -312,10 +433,46 @@ class SpecChange(BaseModel):
 
 A proposal can be a change to code that exists:
 
-```walk proposed python
-Ref::change
+```walk proposed change python
+Ref
+class Ref(BaseModel):
+    """One reference a walkthrough makes, and what it resolved to."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    target: str
+    # "term" is a `t:` or `f:` reference to a term or fact.
+    # "embed" is a line of a `walk` block (a symbol, or with `r:`, a requirement);
+    # "proposal" a `walk proposed` block
+    kind: Literal["embed", "inline", "req", "proposal", "term"]
+    # 1-based line in the walkthrough
+    line: int
+    label: str | None = None
+    sig: bool = False
+    focus: str | None = None
+    symbol: Symbol | None = None
+    requirement: Requirement | None = None
+    definition: Definition | None = None
+    candidates: list[Symbol] = []
+    # Why it can't be shown, when it names a symbol but not the part `focus` asks for
+    error: str | None = None
+    # Proposed: a name that may not exist yet. A proposal's draft code, and its language;
+    # for a settled excerpt (`walk settled`), the draft it was written from
+    proposed: bool = False
     # A `walk proposed change`: a change to code that exists, proposed until it's settled
     change: bool = False
+    settled: bool = False
+    draft: str | None = None
+    lang: str | None = None
+
+    @property
+    def key(self) -> str:
+        """What it's reviewed under: the reference as written, focus and all."""
+        return f"{self.target} > {self.focus}" if self.focus else self.target
+
+    @property
+    def resolved(self) -> bool:
+        return self.symbol is not None or self.requirement is not None or self.definition is not None
 ```
 
 ### Reading versions
@@ -335,8 +492,10 @@ tracey::MARKER
 MARKER = re.compile(rf"\b([a-z][a-z0-9]*)\[(impl|verify)\s+({ID})(?:\+([1-9][0-9]*))?\]")
 ```
 
-Reading a file's requirements becomes a function of its text, which [[SpecIndex::refresh]]
-calls for the spec and a PRD for its own; the terms the same, for [[Glossary::refresh]]:
+Reading a file's requirements becomes a function of its text, in
+`codewalk/spec/requirements.py` beside [[SpecIndex]], which [[SpecIndex::refresh]] calls
+for the spec and a PRD for its own; the terms the same, in `codewalk/spec/terms.py` beside
+[[Glossary]], for [[Glossary::refresh]]:
 
 ```walk proposed python
 requirements::parse
@@ -376,7 +535,8 @@ already says which are stale, so codewalk only carries the version through.
 A PRD's own requirements, terms and facts are read from it, and compared with the spec's.
 [[Glossary::refresh]] skips a file whose front matter says `kind: prd`, so a PRD's
 definitions never join the spec's (`prd.terms`); the spec index never read PRDs anyway.
-The comparison is the heart of this, so in full:
+The comparison is the heart of this, so in full; it goes in `codewalk/walk/prd.py`, with
+[[?prd::SpecChange]]:
 
 ```walk proposed python
 prd::spec_changes
@@ -417,7 +577,8 @@ def spec_changes(w: Walk) -> list[SpecChange]:
 ```
 
 Its errors, and anything written ahead of its stage, are among the PRD's problems, so
-`codewalk check` and the PRD's page both report them; [[Walk::problems]] adds them:
+`codewalk check` and the PRD's page both report them. A new method of [[Walk]], which
+[[Walk::problems]] calls:
 
 ```walk proposed python
 Walk::prd_problems
@@ -447,7 +608,8 @@ error, with the spec's text against it where there is one.
 The stage is read from the front matter, `STAGES` being the stages in order
 (`get_args(Stage)`), and shown on the index, on the PRD's page and in `codewalk context`,
 whose Markdown says, for each PRD, what may be written yet (`prd.stage`,
-`prd.stage-gate`). The PRD's page has a control to set it:
+`prd.stage-gate`). The PRD's page has a control to set it, a new method of [[App]], the
+server, beside [[App::settle]] and [[App::agree]]:
 
 ```walk proposed python
 App::set_stage
@@ -547,7 +709,9 @@ What was asked here and how it was settled, newest first.
 ````
 
 [[cli::new]] writes it, at `stage: problem` (`prd.template`). The index starts one with
-the same template, adding what was asked:
+the same template, adding what was asked, through a new function in
+`codewalk/walk/prd.py`, a new method of [[App]], and a new function in `codewalk/walk/notes.py`
+beside [[notes::ask]]:
 
 ```walk proposed python
 prd::start
