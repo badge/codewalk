@@ -90,7 +90,9 @@ shown against the spec as it stands (`prd.compare`). A requirement whose ID the 
 doesn't have is new. One whose ID it has, with the version bumped, is a change, and is
 shown with the old text beside the new. One with an ID the spec has and the same text is
 quoted for context, and is shown as such; one with an ID the spec has, changed text and no
-new version is an error. A requirement the PRD removes is listed as removed.
+new version is an error. A requirement the PRD removes is written as its marker with the
+version bumped and the word `removed` after it, `r[id+2] removed`, and is listed as
+removed.
 
 Terms and facts work the same way: a PRD's definition of a word the spec already defines is
 a proposed change to it, shown against it, not a second definition (`prd.terms`,
@@ -185,16 +187,17 @@ smallest symbol around it, or the symbol it's directly above.
 
 r[prd.requirements]
 A requirement marker on a line of its own in a PRD MUST be read as a requirement the PRD
-proposes, with the paragraph after it as its text, and MUST NOT be read as part of the
-spec: not by the spec view, the glossary, the traces or the margin of another walkthrough.
+proposes, with the paragraph after it as its text, and one followed by the word `removed`,
+`r[id+N] removed`, as a requirement it removes. Neither MUST be read as part of the spec:
+not by the spec view, the glossary, the traces or the margin of another walkthrough.
 
 r[prd.compare]
 Each requirement a PRD proposes MUST be shown against the spec as it stands: as new if the
 spec has no requirement with its ID; as changed, with the spec's text against its own, if
-its version is greater than the spec's and it has text; as removed if its version is
-greater and it has none; and as quoted if its version and its text are the spec's. One
-whose version isn't greater than the spec's and whose text differs from it MUST be
-reported as an error.
+its version is greater than the spec's; as removed, with the spec's text, if it's written
+`removed`; and as quoted if its version and its text are the spec's. One whose version
+isn't greater than the spec's and whose text differs from it, or that removes a
+requirement the spec doesn't have, MUST be reported as an error.
 
 r[prd.terms]
 A term or fact defined in a PRD MUST be read as a definition the PRD proposes: shown as new,
@@ -242,20 +245,21 @@ bumped. (tracey's documentation, on versioning.)
 
 ## Questions
 
-> [!question] @claude: How should a PRD say it removes a requirement? I've written it in
-> `prd.compare` as the marker with its version bumped and no text after it, `r[id+2]` on
-> its own, which says "the next version of this is nothing". The alternative is a word,
-> such as `r[id+2] removed`, which is plainer to read but is a new piece of syntax.
-
-> [!question] @claude: `prd.stage-gate` makes a requirement or a proposal written before
-> its stage a warning from `codewalk check`, not an error, so a PRD that's gone back a
-> stage, or is being written a little ahead, still checks. Is a warning right, or should
-> the gate be stricter, or only advice in `codewalk context`?
+> [!question] @claude: Is the spec broadly agreed, so this PRD can move to `stage: code`?
+> The next draft would then propose the shape of the code and its tests, here.
 
 ## Changelog
 
 What was asked here and how it was settled, newest first.
 
+- 2026-11-07 (the stage gate): **question** @claude: Should a requirement or proposal
+  written before its stage be a warning from `codewalk check`, an error, or only advice?
+  → **answer** @matthew, in conversation: A warning is appropriate. `prd.stage-gate` as
+  written.
+- 2026-11-07 (removing a requirement): **question** @claude: Should a PRD remove a
+  requirement with its version bumped and no text, `r[id+2]`, or with a word,
+  `r[id+2] removed`? → **answer** @matthew, in conversation: `r[id+2] removed`, which is
+  plainer. Written into the prose, `prd.requirements` and `prd.compare`.
 - 2026-11-07 (to the spec stage): **question** @claude: Is this PRD's prose broadly
   agreed, so it can move to `stage: spec`? → @matthew, in conversation: Yes, we can move
   to the spec stage. Set `stage: spec`, the requirements written in [The spec](#the-spec),
