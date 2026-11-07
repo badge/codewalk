@@ -27,6 +27,9 @@
     </span>
     <span class="spacer"></span>
     {% if t.settled %}
+    <button class="act" data-action="reply" data-kind="answer">Answer</button>
+    <button class="act" data-action="reply" data-kind="question">Ask more</button>
+    <button class="act" data-action="reply" data-kind="decision">Decide</button>
     <button class="act" data-action="resolve" data-mode="changelog" title="Take it out of the text, keeping one line of it in the changelog at the end">To changelog</button>
     <button class="act" data-action="resolve" data-mode="remove" title="Take it out altogether">Remove</button>
     {% else %}

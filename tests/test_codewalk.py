@@ -559,6 +559,36 @@ def test_a_proposal_for_a_name_not_written_yet_is_in_hand_not_broken(repo):
     assert 'class="walk proposal pending"' in body and "proposed-ref" in body
 
 
+# r[verify proposal.agree]
+def test_agreeing_a_proposal_writes_a_decision_under_it_and_context_says_so(client, repo):
+    from codewalk.walk.brief import as_markdown, brief
+
+    (repo / "docs/walk.md").write_text(PROPOSAL + "\nAfter.\n")
+    w = Walk(ctx(repo), "docs/walk.md")
+    assert w.agreement(w.refs[-1]) is None and "not agreed yet" in as_markdown([brief(ctx(repo), "docs/walk.md")])
+    r = client.post("/api/agree", json={"path": "docs/walk.md", "line": 6, "end": 10, "text": "Agreed."})
+    assert r.json()["agreed"] == "Battery::rest"
+    assert "}\n```\n\n> [!decision]" in (repo / "docs/walk.md").read_text()
+    w = Walk(ctx(repo), "docs/walk.md")
+    b = brief(ctx(repo), "docs/walk.md")
+    assert b.proposed[0].agreed.endswith("Agreed.") and ", agreed (" in as_markdown([b])
+    body, _ = render(w)
+    assert 'class="badge agreed"' in body and "Agree again" in body
+    # Agreeing again, or changing it, goes into the same thread
+    client.post("/api/agree", json={"path": "docs/walk.md", "line": 6, "end": 10, "text": "Agreed, but call it `pause`."})
+    w = Walk(ctx(repo), "docs/walk.md")
+    assert len(w.threads) == 1 and [n.kind for n in w.threads[0].notes] == ["decision", "decision"]
+    assert w.agreement(w.refs[-1]).text.startswith("Agreed, but")
+
+
+# r[verify note.add-settled]
+def test_a_settled_thread_can_still_be_answered_or_decided_on(repo):
+    w = walk(repo, "# W\n\n```walk\nMARGIN\n```\n\n> [!question] @m: Why?\n>\n> [!answer] @c: Because.\n")
+    assert w.threads[0].settled
+    body, _ = render(w)
+    assert all(f'data-kind="{k}"' in body for k in ("answer", "question", "decision")) and 'data-mode="changelog"' in body
+
+
 # r[verify proposal.settle]
 # r[verify proposal.progress]
 def test_once_written_a_proposal_shows_the_code_against_the_draft_and_can_be_settled(repo):

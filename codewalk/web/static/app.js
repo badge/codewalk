@@ -303,6 +303,9 @@
       await api("/api/resolve", { path: data.doc, thread: +thread.dataset.thread, mode });
       toast(mode === "changelog" ? "Moved to the changelog, as one line" : "Removed");
       refresh();
+    } else if (action === "agree" && fig) {
+      // r[impl proposal.agree]
+      composer(fig, { line: +fig.dataset.md, end: +fig.dataset.mdEnd }, `Agree ${fig.dataset.ref}`, false, { endpoint: "/api/agree", text: "Agreed: write it as proposed." });
     } else if (action === "settle" && fig) {
       const r = await api("/api/settle", { path: data.doc, line: +fig.dataset.md });
       toast(`Settled: ${r.settled} is an ordinary excerpt now`);
@@ -319,7 +322,7 @@
   });
 
   // A note, written into the Markdown: a new question after a block, or added to a thread
-  function composer(after, target, title, chooseKind = false) {
+  function composer(after, target, title, chooseKind = false, { endpoint = "/api/note", text = "" } = {}) {
     $$(".composer").forEach((c) => c.remove());
     const box = document.createElement("form");
     box.className = "composer";
@@ -330,11 +333,13 @@
     if (after.classList.contains("note")) after.appendChild(box);
     else after.insertAdjacentElement(after.classList.contains("thread") ? "beforeend" : "afterend", box);
     const ta = $("textarea", box);
+    ta.value = text;
     ta.focus();
+    ta.select();
     const send = async () => {
       if (!ta.value.trim()) return;
       const kind = $("input[name=kind]:checked", box)?.value;
-      const r = await api("/api/note", { path: data.doc, text: ta.value, ...target, ...(kind ? { kind } : {}) });
+      const r = await api(endpoint, { path: data.doc, text: ta.value, ...target, ...(kind ? { kind } : {}) });
       box.remove();
       toast(`Written${r.author ? ` as @${r.author}` : ""}`);
       refresh();

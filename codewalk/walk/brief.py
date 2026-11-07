@@ -21,6 +21,8 @@ class Item(BaseModel):
     text: str
     # What it's about: the names it refers to, or that sit just above it
     about: list[str] = []
+    # For a proposal: the decision agreeing it, as `@author: text`
+    agreed: str | None = None
 
 
 class Brief(BaseModel):
@@ -56,7 +58,9 @@ def brief(ctx: Context, rel: str) -> Brief:
         if r.symbol:
             out.written.append(Item(line=r.line, text=f"{r.symbol.file}:{r.symbol.line}", about=[r.target]))
         elif len(r.candidates) <= 1 or not all(c.name == r.target.split("::")[-1] for c in r.candidates):
-            out.proposed.append(Item(line=r.line, text=r.draft or "", about=[r.target]))
+            d = w.agreement(r)
+            agreed = ((f"@{d.author}: " if d.author else "") + d.text.strip()) if d else None
+            out.proposed.append(Item(line=r.line, text=r.draft or "", about=[r.target], agreed=agreed))
     for p in w.problems():
         if p.severity == "warning":
             out.changed.append(Item(line=p.line, text=p.message, about=[p.ref] if p.ref else []))
@@ -89,7 +93,7 @@ def as_markdown(briefs: list[Brief]) -> str:
         sections = [
             ("Standing requests", "do each, then add `> [!done] @you: ...` to its thread, saying what you did", b.requests),
             ("Open questions", "answer each in place, with `> [!answer] @you: ...` added to its thread", b.questions),
-            ("Proposed, not written yet", "write it, or revise the proposal", b.proposed),
+            ("Proposed, not written yet", "write those a person has agreed; revise the others as their threads say", b.proposed),
             ("Proposed and now written", "check it against the draft, then settle the block into an ordinary `walk` block", b.written),
             ("Changed since it was reviewed", "check the text around it is still true; a person marks it reviewed", b.changed),
             ("Broken", "fix the reference", b.broken),
@@ -102,7 +106,8 @@ def as_markdown(briefs: list[Brief]) -> str:
                 about = f" (`{'`, `'.join(item.about)}`)" if item.about else ""
                 body = item.text.strip().replace("\n", "\n  ")
                 if heading.startswith("Proposed, not"):
-                    lines.append(f"- line {item.line}{about}:\n\n  ```\n  {body}\n  ```")
+                    agreed = f", agreed ({item.agreed.splitlines()[0]})" if item.agreed else ", not agreed yet"
+                    lines.append(f"- line {item.line}{about}{agreed}:\n\n  ```\n  {body}\n  ```")
                 else:
                     lines.append(f"- line {item.line}{about}: {body}")
             lines.append("")

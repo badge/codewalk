@@ -469,6 +469,37 @@ class App:
         path.write_text(settle(w.text, line, ref.target))
         return {"settled": ref.target}
 
+    # r[impl proposal.agree]
+    def agree(self, rel: str, line: int, end: int, body: str) -> dict:
+        """Agree the proposal on line `line`: a decision in the thread after its block, or a new one.
+
+        Parameters
+        ----------
+        rel : str
+            The walkthrough, from the root.
+        line : int
+            The proposal's line: its name's, as the reference has it.
+        end : int
+            The block's last line, which a new thread goes after.
+        body : str
+            The decision, in the person's words.
+
+        Returns
+        -------
+        dict
+            `agreed`, the proposal's name, and the `author` it was written as.
+        """
+        path = self.writable(rel)
+        w = Walk(self.ctx, rel)
+        ref = next((r for r in w.refs if r.kind == "proposal" and r.line == line), None)
+        if ref is None:
+            raise FileNotFoundError(f"no proposal on line {line}")
+        author = self.ctx.config.who(self.ctx.root)
+        t = w.thread_after(ref)
+        text = notes.reply(w.text, t, "decision", author, body) if t else notes.ask(w.text, end, author, body, kind="decision")
+        path.write_text(text)
+        return {"agreed": ref.target, "author": author}
+
     # r[impl review.people]
     def review(self, rel: str, ref: str | None) -> dict:
         w = Walk(self.ctx, rel)
@@ -613,6 +644,10 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
         b = await request.json()
         return JSONResponse(await threaded(app.resolve, b["path"], int(b["thread"]), b["mode"]))
 
+    async def agree(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.agree, b["path"], int(b["line"]), int(b["end"]), b["text"]))
+
     async def settle_(request: Request):
         b = await request.json()
         return JSONResponse(await threaded(app.settle, b["path"], int(b["line"])))
@@ -673,6 +708,7 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
             Route("/api/review", review, methods=["POST"]),
             Route("/api/note", note, methods=["POST"]),
             Route("/api/settle", settle_, methods=["POST"]),
+            Route("/api/agree", agree, methods=["POST"]),
             Route("/api/resolve", resolve, methods=["POST"]),
             Route("/api/reconcile", reconcile, methods=["POST"]),
             Route("/events", events),

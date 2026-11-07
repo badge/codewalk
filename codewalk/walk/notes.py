@@ -244,8 +244,8 @@ def _quote(kind: str, author: str | None, body: str, depth: int = 0) -> list[str
     return [f"{prefix}{head} {lines[0]}".rstrip()] + [f"{prefix}{l}".rstrip() for l in lines[1:]]
 
 
-def ask(text: str, after_line: int, author: str | None, body: str) -> str:
-    """`text` with a new question thread after line `after_line`, set off by blank lines.
+def ask(text: str, after_line: int, author: str | None, body: str, kind: Kind = "question") -> str:
+    """`text` with a new thread after line `after_line`, set off by blank lines: a question, by default.
 
     Parameters
     ----------
@@ -257,6 +257,8 @@ def ask(text: str, after_line: int, author: str | None, body: str) -> str:
         Who's asking.
     body : str
         The question.
+    kind : Kind
+        What the thread starts with: a question, or a decision agreeing what's above it.
 
     Returns
     -------
@@ -265,7 +267,7 @@ def ask(text: str, after_line: int, author: str | None, body: str) -> str:
     """
     lines = text.split("\n")
     at = min(after_line, len(lines))
-    block = ["", *_quote("question", author, body), ""]
+    block = ["", *_quote(kind, author, body), ""]
     if at < len(lines) and lines[at].strip() == "":
         block = block[:-1]
     return "\n".join(lines[:at] + block + lines[at:])

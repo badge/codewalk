@@ -325,6 +325,7 @@ figure.walk.proposal.written { border-color: color-mix(in srgb, var(--ok) 50%, v
 .k-proposed { background: var(--accent); color: white; }
 .badge.proposed { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .badge.written { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.badge.agreed { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
 pre.code.draft .ln { color: var(--accent); opacity: .6; width: 30px; }
 .act.primary { color: var(--accent); border-color: var(--accent); }
 .proposed-ref code { background: transparent !important; border: 1px dashed var(--accent); color: var(--accent); }

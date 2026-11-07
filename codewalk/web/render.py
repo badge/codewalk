@@ -268,6 +268,7 @@ class Renderer:
             diff=diff,
             end=end,
             ambiguous=ambiguous,
+            agreed=None if ref.symbol else self.walk.agreement(ref),
             candidates=[self.ctx.index.shortest_unique(c) for c in ref.candidates] if ambiguous else [],
             zed=self.symbols[ref.target]["zed"] if ref.symbol else None,
             slug=_slug(ref.target),
@@ -398,6 +399,7 @@ class Renderer:
         mark(out)
         return out
 
+    # r[impl note.add-settled]
     def thread(self, open_idx: int, close_idx: int, thread, env) -> str:
         """A thread of notes, each note's Markdown rendered as the page renders it.
 

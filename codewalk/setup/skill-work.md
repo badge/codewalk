@@ -13,8 +13,10 @@ true as you go.
 2. **Answer** each open question you can, in its thread: `> [!answer] @agent: …`. A
    `[!decision]` from a person settles a question; follow it. If a decision is still
    needed, stop and say so.
-3. **Write the code** each `walk proposed` block proposes, as agreed in the threads,
-   following the project's own process (its spec, tests and checks).
+3. **Write the code** each agreed `walk proposed` block proposes (`{codewalk} context`
+   says which: a person agrees one with a decision in the thread under it), as the
+   threads say, following the project's own process (its spec, tests and checks). Don't
+   write one that isn't agreed; if it's ready, ask for it to be.
 4. **Settle each proposal** once its name exists: compare what you wrote with the draft,
    say in the prose where and why they differ, and settle it (`walk proposed` becomes
    `walk settled`, keeping the draft, so what was planned stays beside what was built).

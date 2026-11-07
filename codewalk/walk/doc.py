@@ -54,7 +54,7 @@ from codewalk.code.index import CodeIndex, Symbol, narrow
 from codewalk.config import Config
 from codewalk.spec.requirements import Requirement, SpecIndex
 from codewalk.spec.terms import Definition, Glossary
-from codewalk.walk.notes import Thread, threads
+from codewalk.walk.notes import Note, Thread, threads
 from codewalk.walk.review import ReviewState
 
 WIKI = re.compile(r"\[\[([^\[\]|]+?)(?:\|([^\[\]]+?))?\]\]")
@@ -423,6 +423,16 @@ class Walk:
             lang=words[2] if len(words) > 2 else None,
         )
         return self._resolve(ref)
+
+    def thread_after(self, ref: Ref) -> Thread | None:
+        """The thread directly after the block `ref` is in, if there is one."""
+        return next((t for t in self.threads if t.about_line is not None and t.about_line <= ref.line < t.line), None)
+
+    # r[impl proposal.agree]
+    def agreement(self, ref: Ref) -> Note | None:
+        """The last decision in the thread after a proposal: a person agreeing it, or changing it."""
+        t = self.thread_after(ref)
+        return next((n for n in reversed(t.all()) if n.kind == "decision"), None) if t else None
 
     # r[impl proposal.progress]
     def progress(self) -> Progress:

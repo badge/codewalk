@@ -22,13 +22,17 @@ author in the config or from git (`note.write`). Asking about one excerpt of sev
 block puts the question directly under that excerpt (`note.ask-here`). A settled thread
 can leave the text: into a changelog at the end of the walkthrough, compacted to a line
 of what was asked and how it was settled, or removed altogether (`note.resolve`). An open
-one can't (`note.resolve-open`).
+one can't (`note.resolve-open`). A settled thread can still be added to, since an answer
+is often followed by a decision to go with it (`note.add-settled`).
 
 ### Proposals
 
 Code that doesn't exist yet can be proposed: drafted in a `walk proposed` block under the
 name it will have (`proposal.draft`). Until the name exists, it's in hand, not broken
-(`proposal.pending`). Once it does, the proposal shows what was written against the
+(`proposal.pending`). A person agrees a proposal from the browser: a decision, signed as
+them, in the thread under it, which starts one if there's none. Until it's written, the
+proposal is then agreed, and says so on the page and in `codewalk context`, so the agent
+knows it can be written (`proposal.agree`). Once it does, the proposal shows what was written against the
 draft, and can be settled: the block becomes `walk settled`, keeping the draft, so what
 was planned and what was done stay side by side (`proposal.settle`). A walkthrough's
 progress is how much of what it proposes is settled (`proposal.progress`); a PRD starts
@@ -104,12 +108,22 @@ came between.
 r[note.resolve-open]
 Resolving a thread that's open MUST be refused.
 
+r[note.add-settled]
+A settled thread MUST offer, besides resolving it, to add an answer, a question or a
+decision to it.
+
 r[proposal.draft]
 A `walk proposed` block MUST be read as a proposal: its first line the name the code will
 have, the rest its draft.
 
 r[proposal.pending]
 A proposal whose name doesn't resolve MUST be reported as in hand, not as broken.
+
+r[proposal.agree]
+Agreeing a proposal from the browser MUST write a `[!decision]` signed as the person into
+the thread directly after its block, starting one there if there's none. A proposal not
+yet written, with a decision in that thread, MUST be shown as agreed, and `codewalk
+context` MUST list it as agreed, with the decision.
 
 r[proposal.settle]
 Settling a written proposal MUST turn its block into `walk settled`, keeping the draft,
