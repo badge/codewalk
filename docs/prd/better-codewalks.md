@@ -2,7 +2,7 @@
 title: "Better codewalks"
 summary: "A codewalk explains code and a PRD changes it; words that aren't always terms; and the margin and the code beside the page staying out of the way."
 kind: prd
-stage: spec
+stage: code
 tags: [ui, prd]
 related: ["authoring-prds.md", "../walkthrough.md"]
 ---
@@ -148,8 +148,144 @@ else the block at the top of the window, at the same height in the window.
 
 ## The code
 
-<!-- At the code stage: the data model in full, and the code that implements each
-requirement, in full where it's intricate and by its signature where it's routine. -->
+### The word
+
+A rename, done as one change before the rest: "walkthrough" for "codewalk" in every file
+but the PRDs, which are records of what was said, in each of its forms (`walkthroughs`,
+`Walkthrough`, `walkthrough's`), then the two files renamed, every link to them, and
+their keys in `codewalk.review.json`. Nothing about it is worth proposing as code; the
+tests say whether it's whole.
+
+### A codewalk, and a PRD
+
+[[Walk::problems]] warns of a proposal in a codewalk whose `kind` isn't `prd`
+(`proposal.draft+2`), and the pages show a codewalk's progress only if it's a PRD
+(`proposal.progress+2`): progress is still counted for any codewalk, so nothing in the
+data model changes.
+
+A thread in a codewalk that isn't a PRD has a **Start a PRD** button, which opens the same
+form as the index, with what's asked filled in from the thread's first note. Starting it
+goes to the server with where it came from, which links the two:
+
+```walk proposed change python
+App::start_prd
+# r[impl prd.start]
+# r[impl prd.from-thread]
+# r[impl serve.local]
+def start_prd(self, title: str, ask: str, source: str | None = None, thread: int | None = None) -> dict:
+    """Start a PRD from the index, or from a thread in a codewalk, and say where to open it.
+
+    From a thread, the PRD's request says which codewalk it came from, and a note added to
+    the thread says where the PRD is.
+    """
+    origin = (source, next(t for t in Walk(self.ctx, source).threads if t.line == thread)) if source and thread else None
+    if origin:
+        ask += f"\n\nFrom [{Walk(self.ctx, source).title}]({os.path.relpath(source, prd.FOLDER)})."
+    try:
+        rel = prd.start(self.ctx, title, ask)
+    except FileExistsError as e:
+        raise ValueError(f"there's a PRD at {e} already") from e
+    if origin:
+        path = self.writable(source)
+        note = f"Taken up in a PRD: [{title}]({os.path.relpath(rel, os.path.dirname(source))})."
+        path.write_text(notes.reply(path.read_text(), origin[1], "note", self.ctx.config.who(self.ctx.root), note))
+    return {"started": rel, "href": f"/walk/{rel}"}
+```
+
+### Words that aren't always terms
+
+A definition says whether its term is cited only:
+
+```walk proposed change python
+Definition
+class Definition(BaseModel):
+    kind: Literal["term", "fact"]
+    id: str
+    # How a fact is known; None for a term
+    status: Literal["documented", "observed", "assumed"] | None = None
+    # A term linked only where it's cited, `t[id] cited-only`, since its word is often used
+    # in its ordinary sense
+    cited_only: bool = False
+    file: str
+    line: int
+    text: str
+
+    @property
+    def words(self) -> str:
+        """A term as it's written in prose."""
+        return self.id.replace("-", " ")
+```
+
+```walk proposed change python
+DEF_LINE
+DEF_LINE = re.compile(r"^(t|f)\[([a-z0-9][a-z0-9.\-]*)\](?:[ \t]+(documented|observed|assumed|cited-only))?[ \t]*$")
+```
+
+`terms::parse` reads `cited-only` for a term only, and the pattern that finds a term's
+words in prose leaves cited-only terms out:
+
+```walk proposed change python
+Glossary::mentions
+def mentions(self) -> re.Pattern | None:
+    """A pattern for every term as it's written in prose, but those cited only.
+
+    Longest first, singular or plural, whole words only, ignoring case.
+
+    Returns
+    -------
+    re.Pattern or None
+        None if no terms are to be found in prose.
+    """
+    if self._pattern is None:
+        words = sorted((d.words for d in self.terms.values() if not d.cited_only), key=len, reverse=True)
+        alts = "|".join(re.escape(w).replace(r"\ ", r"[ \-]") for w in words)
+        self._pattern = re.compile(rf"\b({alts})(?:s|es)?\b", re.IGNORECASE) if words else None
+    return self._pattern
+```
+
+### The margin and the code beside the page
+
+All three are in `app.js` and `app.css`, which codewalk doesn't index: the editor's header
+gets the **Requirements** toggle, using the same remembered setting as reading, and the
+editor hides the preview's margin while a file is open beside it (`ui.edit-margin`); the
+margin stops scrolling under the pointer and passes the wheel to the page
+(`ui.margin+2`); and opening or closing a file beside the page measures the block that was
+clicked, or the one at the top of the window, before the layout changes, and scrolls by
+however far it moved (`ui.context-place`). Like `ui.place`, the last two are checked in a
+browser, not by the tests.
+
+### Tests
+
+```walk proposed python
+test_a_proposal_in_a_codewalk_that_isnt_a_prd_is_a_warning
+# r[verify proposal.draft+2]
+def test_a_proposal_in_a_codewalk_that_isnt_a_prd_is_a_warning(repo): ...
+```
+
+```walk proposed python
+test_only_a_prd_shows_its_progress
+# r[verify proposal.progress+2]
+def test_only_a_prd_shows_its_progress(client, repo): ...
+```
+
+```walk proposed python
+test_a_prd_started_from_a_thread_and_the_thread_link_to_each_other
+# r[verify prd.from-thread]
+def test_a_prd_started_from_a_thread_and_the_thread_link_to_each_other(client, repo): ...
+```
+
+```walk proposed python
+test_a_cited_only_term_is_linked_only_where_its_cited
+# r[verify term.define+2]
+# r[verify term.cite+2]
+def test_a_cited_only_term_is_linked_only_where_its_cited(repo): ...
+```
+
+```walk proposed python
+test_the_editor_can_put_the_margin_away
+# r[verify ui.edit-margin]
+def test_the_editor_can_put_the_margin_away(client, repo): ...
+```
 
 ## Terms
 
@@ -162,12 +298,14 @@ codewalk has called a walkthrough.)
 
 ## Questions
 
-> [!question] @claude: Is the spec broadly agreed, so this PRD can move to `stage: code`?
 
 ## Changelog
 
 What was asked here and how it was settled, newest first.
 
+- 2026-11-07 (to the code): **question** @claude: Is the spec broadly agreed? → @matthew,
+  in conversation: Yes, and go on to the work too. Set `stage: code`, with the outline in
+  [The code](#the-code).
 - 2026-11-07 (the word): **question** @claude: How far should "codewalk" replace
   "walkthrough"? → **answer** @matthew, in conversation: Everywhere; rewrite the specs
   without bumping the versions, since tracey isn't used on the codebase yet. Written into
