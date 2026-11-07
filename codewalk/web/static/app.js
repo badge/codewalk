@@ -67,7 +67,7 @@
     card.style.top = `${Math.max(56, top)}px`;
   }
   function symbolCard(s) {
-    const reqs = (s.markers || []).map(([k, id]) => `<span>${esc(k)} ${esc(id)}</span>`).join("");
+    const reqs = (s.markers || []).map(([k, id, v]) => `<span>${esc(k)} ${esc(id)}${v > 1 ? `+${v}` : ""}</span>`).join("");
     return `<div class="hc-top"><span class="kind k-${esc(s.kind)}">${esc(s.kind)}</span><span class="hc-q">${esc(s.qualified)}</span></div>
       <div class="hc-sig">${esc(s.signature)}</div>
       ${s.doc ? `<div class="hc-doc">${esc(s.doc)}</div>` : ""}
@@ -306,6 +306,11 @@
     } else if (action === "agree" && fig) {
       // r[impl proposal.agree]
       composer(fig, { line: +fig.dataset.md, end: +fig.dataset.mdEnd }, `Agree ${fig.dataset.ref}`, false, { endpoint: "/api/agree", text: "Agreed: write it as proposed." });
+    } else if (action === "new-prd") {
+      // r[impl prd.start]
+      const form = $("#new-prd");
+      form.hidden = false;
+      $("input[name=title]", form).focus();
     } else if (action === "settle" && fig) {
       const r = await api("/api/settle", { path: data.doc, line: +fig.dataset.md });
       toast(`Settled: ${r.settled} is an ordinary excerpt now`);
@@ -319,6 +324,26 @@
       toast(`${r.reconciled.length} requirements agree with their prose`);
       refresh();
     }
+  });
+
+  // Starting a PRD from the index, and setting a PRD's stage from its page
+  $("#new-prd")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    try {
+      const r = await api("/api/prd", { title: form.title.value, ask: form.ask.value });
+      location.href = r.href;
+    } catch (err) {
+      $(".np-error", form).textContent = JSON.parse(err.message).error || err.message;
+    }
+  });
+  $("#new-prd [data-role=cancel]")?.addEventListener("click", () => { $("#new-prd").hidden = true; });
+  // r[impl prd.stage-set]
+  document.addEventListener("change", async (e) => {
+    if (e.target.dataset.action !== "stage") return;
+    await api("/api/stage", { path: data.doc, stage: e.target.value });
+    toast(`Stage: ${e.target.value}`);
+    refresh();
   });
 
   // A note, written into the Markdown: a new question after a block, or added to a thread

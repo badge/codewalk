@@ -14,9 +14,12 @@ tracey.
 The spec is the Markdown that tracey's config names as specs, and any more in
 `codewalk.toml` (`spec.files`). A requirement is a line of its own, `r[id]`, or with the
 name of a spec in tracey's config as its prefix; one with a spec's name is known by both,
-since two specs can share an ID (`spec.prefix`). The code names a requirement in a
-comment, `r[impl id]` or `r[verify id]`, and codewalk finds the symbol each is on
-(`spec.traces`), so a requirement in a walkthrough can show its code.
+since two specs can share an ID (`spec.prefix`). A requirement whose text changes has its
+version bumped, `r[id+2]`, so code written against the old text can be found
+([[f:tracey.versions]]). The code names a requirement in a comment, `r[impl id]` or
+`r[verify id]`, with the version it was written against if it isn't the first,
+`r[impl id+2]`, and codewalk finds the symbol each is on (`spec.traces`), so a
+requirement in a walkthrough can show its code.
 
 ### Prose beside the spec
 
@@ -40,7 +43,8 @@ the world is a fact, `f[id]`, with how it's known: documented, observed or assum
 the requirements, so a spec reads complete on its own; those that run through all of
 codewalk are in its top-level spec. They're cited like requirements, and a term is also
 found wherever its words appear in prose, and linked to where it's defined
-(`term.cite`). One defined twice, or cited and not defined, is an error (`term.errors`).
+(`term.cite`). One defined twice in the spec, or cited and not defined, is an error; a
+[[t:prd]] defining one is proposing it, not defining it twice (`term.errors`).
 The glossary collects them all, by the spec that defines each, with where each is used
 (`term.glossary`).
 
@@ -91,21 +95,29 @@ beside requirements. Probably not so: its documentation says any lowercase alpha
 prefix is a requirement marker, inferred from a spec's files ([[f:tracey.prefix]]), so it
 likely reads them as requirements of specs called `t` and `f`. Not checked by running it.
 
+f[tracey.versions] documented
+A requirement's ID can carry a version, `r[id+2]`; without one it's version 1. When a
+requirement's text changes its version is bumped, and code naming an older version,
+`r[impl id]`, is stale, and not counted as covered until it's updated and its marker
+bumped. (tracey's documentation, on versioning.)
+
 ## Requirements
 
 r[spec.files]
 The spec MUST be the files matched by the `include` globs of each spec in
 `.config/tracey/config.styx`, and by the `specs` globs in `codewalk.toml`.
 
-r[spec.prefix]
-A line consisting only of `prefix[id]`, where prefix is `r` or the name of a spec in
-tracey's config, MUST be read as a requirement, with the paragraph after it as its text.
-One with a prefix other than `r` MUST be known as `prefix:id`, and written without the
-prefix, in a file of the same spec, MUST resolve to it.
+r[spec.prefix+2]
+A line consisting only of `prefix[id]` or `prefix[id+N]`, where prefix is `r` or the name
+of a spec in tracey's config, MUST be read as a requirement, of version N or else 1, with
+the paragraph after it as its text. One with a prefix other than `r` MUST be known as
+`prefix:id`, and written without the prefix, in a file of the same spec, MUST resolve to
+it.
 
-r[spec.traces]
-A comment containing `prefix[impl id]` or `prefix[verify id]` MUST be read as a trace of
-that requirement, on the smallest symbol around it, or the symbol it's directly above.
+r[spec.traces+2]
+A comment containing `prefix[impl id]` or `prefix[verify id]`, with or without `+N` after
+the ID, MUST be read as a trace of that requirement, of version N or else 1, on the
+smallest symbol around it, or the symbol it's directly above.
 
 r[spec.cite]
 A spec file's prose MUST be taken to cite a requirement where it has the requirement's
@@ -135,9 +147,10 @@ r[term.cite]
 citations, and a term's words in prose SHOULD be linked to it the first time in each
 paragraph.
 
-r[term.errors]
-A term or fact defined more than once, or cited and not defined, MUST be reported as an
-error.
+r[term.errors+2]
+A term or fact defined more than once in the spec, or cited and defined neither in the
+spec nor in the PRD citing it, MUST be reported as an error. A PRD's definition of one the
+spec defines isn't a second definition.
 
 r[term.glossary]
 The glossary page MUST list every term and fact, grouped by the file that defines it,

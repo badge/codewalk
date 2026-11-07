@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from codewalk.walk.doc import Context, Walk
+from codewalk.walk.doc import Context, Stage, Walk
 
 
 class Item(BaseModel):
@@ -28,6 +28,8 @@ class Item(BaseModel):
 class Brief(BaseModel):
     walkthrough: str
     title: str
+    # For a PRD, its stage, and so what may be written in it yet
+    stage: Stage | None = None
     requests: list[Item] = []
     questions: list[Item] = []
     proposed: list[Item] = []
@@ -37,13 +39,14 @@ class Brief(BaseModel):
 
     @property
     def empty(self) -> bool:
-        return not (self.requests or self.questions or self.proposed or self.written or self.changed or self.broken)
+        return not self.stage and not (self.requests or self.questions or self.proposed or self.written or self.changed or self.broken)
 
 
 # r[impl context.brief]
 def brief(ctx: Context, rel: str) -> Brief:
     w = Walk(ctx, rel)
-    out = Brief(walkthrough=rel, title=w.title)
+    stage = (w.meta.stage or "problem") if w.meta.kind == "prd" else None
+    out = Brief(walkthrough=rel, title=w.title, stage=stage)
     for t in w.threads:
         about = [r.key for r in w.refs if r.kind in ("embed", "proposal") and t.about_line is not None and t.about_line <= r.line < t.line]
         for rq in t.open_requests:
@@ -55,7 +58,7 @@ def brief(ctx: Context, rel: str) -> Brief:
     for r in w.refs:
         if r.kind != "proposal":
             continue
-        if r.symbol:
+        if r.symbol and not r.change:
             out.written.append(Item(line=r.line, text=f"{r.symbol.file}:{r.symbol.line}", about=[r.target]))
         elif len(r.candidates) <= 1 or not all(c.name == r.target.split("::")[-1] for c in r.candidates):
             d = w.agreement(r)
@@ -71,6 +74,18 @@ def brief(ctx: Context, rel: str) -> Brief:
     return out
 
 
+# What a PRD's stage allows to be written in it, for an agent
+MAY_WRITE = {
+    "problem": "write the problem; no requirements or proposals yet.",
+    "prose": "write the prose, and the terms and facts it needs; no requirements or proposals yet.",
+    "spec": "write the requirements that follow from the prose; no proposals yet.",
+    "code": "propose the shape of the code and its tests, in outline.",
+    "work": "move the prose and requirements into the spec, write the code, and settle the proposals.",
+}
+
+
+# r[impl prd.stage]
+# r[impl prd.stage-gate]
 def as_markdown(briefs: list[Brief]) -> str:
     """For an agent to read: each walkthrough with anything in hand, and what to do.
 
@@ -90,6 +105,8 @@ def as_markdown(briefs: list[Brief]) -> str:
         return "\n".join(lines + ["Nothing: every reference resolves, no questions are open and no proposals are waiting.", ""])
     for b in todo:
         lines += [f"## {b.title}", "", f"`{b.walkthrough}`", ""]
+        if b.stage:
+            lines += [f"A PRD at the **{b.stage}** stage: {MAY_WRITE[b.stage]}", ""]
         sections = [
             ("Standing requests", "do each, then add `> [!done] @you: ...` to its thread, saying what you did", b.requests),
             ("Open questions", "answer each in place, with `> [!answer] @you: ...` added to its thread", b.questions),

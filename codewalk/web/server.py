@@ -29,8 +29,8 @@ from starlette.staticfiles import StaticFiles
 
 from codewalk.code.highlight import highlight_lines
 from codewalk.spec import prose, trail
-from codewalk.walk import notes
-from codewalk.walk.doc import Context, Walk, settle
+from codewalk.walk import notes, prd
+from codewalk.walk.doc import STAGES, Context, Walk, set_front_matter, settle
 from codewalk.walk.library import Library
 from codewalk.web.render import _slug, diff_rows, page_data_json, render, requirement_html, templates
 
@@ -160,6 +160,7 @@ class App:
             headings=w.headings(),
             summary=library.get(rel),
             titles=library.titles(),
+            stages=STAGES,
             errors=sum(1 for p in problems if p.severity == "error"),
             changed=sum(1 for p in problems if p.severity == "warning"),
         )
@@ -500,6 +501,27 @@ class App:
         path.write_text(text)
         return {"agreed": ref.target, "author": author}
 
+    # r[impl prd.stage-set]
+    def set_stage(self, rel: str, stage: str) -> dict:
+        """Set a PRD's stage in its front matter, from its page."""
+        if stage not in STAGES:
+            raise ValueError(f"not a stage: {stage}")
+        path = self.writable(rel)
+        if Walk(self.ctx, rel).meta.kind != "prd":
+            raise ValueError(f"{rel} isn't a PRD")
+        path.write_text(set_front_matter(path.read_text(), "stage", stage))
+        return {"stage": stage}
+
+    # r[impl prd.start]
+    # r[impl serve.local]
+    def start_prd(self, title: str, ask: str) -> dict:
+        """Start a PRD from the index, and say where to open it."""
+        try:
+            rel = prd.start(self.ctx, title, ask)
+        except FileExistsError as e:
+            raise ValueError(f"there's a PRD at {e} already") from e
+        return {"started": rel, "href": f"/walk/{rel}"}
+
     # r[impl review.people]
     def review(self, rel: str, ref: str | None) -> dict:
         w = Walk(self.ctx, rel)
@@ -644,6 +666,14 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
         b = await request.json()
         return JSONResponse(await threaded(app.resolve, b["path"], int(b["thread"]), b["mode"]))
 
+    async def stage(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.set_stage, b["path"], b["stage"]))
+
+    async def start_prd(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.start_prd, b["title"], b["ask"]))
+
     async def agree(request: Request):
         b = await request.json()
         return JSONResponse(await threaded(app.agree, b["path"], int(b["line"]), int(b["end"]), b["text"]))
@@ -709,6 +739,8 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
             Route("/api/note", note, methods=["POST"]),
             Route("/api/settle", settle_, methods=["POST"]),
             Route("/api/agree", agree, methods=["POST"]),
+            Route("/api/stage", stage, methods=["POST"]),
+            Route("/api/prd", start_prd, methods=["POST"]),
             Route("/api/resolve", resolve, methods=["POST"]),
             Route("/api/reconcile", reconcile, methods=["POST"]),
             Route("/events", events),

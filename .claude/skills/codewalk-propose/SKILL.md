@@ -13,7 +13,9 @@ piece of code shown in place, and answer your questions in it.
    starting another.
 2. **Find the code** the change touches with `uv run codewalk find QUERY`, and read it.
 3. **Write the walkthrough** at `docs/<slug>.md` (for a PRD, start it with
-   `uv run codewalk new PATH --title T --prd`, wherever the project keeps PRDs), with front
+   `uv run codewalk new PATH --title T --prd`, wherever the project keeps PRDs, and write
+   only what its `stage` allows: no requirements before the spec stage, no proposals
+   before the code stage), with front
    matter (a `summary`, `tags`, and `related` for walkthroughs it builds on):
    - What the change is for, in a paragraph a person can agree or disagree with.
    - How the code works now, each part named in a `walk` block (`> text` to show only

@@ -8,7 +8,14 @@
       <p class="lede">Markdown about the code, with every reference checked against it and shown in context.
         {{ symbols }} symbols indexed, {{ requirements }} requirements.</p>
     </div>
+    <button class="tb primary" data-action="new-prd" title="Start a PRD: a change agreed before it's made">New PRD</button>
   </div>
+  <form class="new-prd" id="new-prd" hidden>
+    <label>Title <input name="title" required autocomplete="off" placeholder="What the change is, in a few words"></label>
+    <label>What you want <textarea name="ask" rows="4" required placeholder="In your own words: the problem, and what you'd like done about it"></textarea></label>
+    <p class="hint">It's written at <code>docs/prd/</code>, at the problem stage, with what you want as a standing request for the agent to pick up.</p>
+    <div class="cp-foot"><span class="np-error"></span><button type="button" class="tb" data-role="cancel">Cancel</button><button class="tb primary">Start it</button></div>
+  </form>
 
   {% if library.walkthroughs %}
   <div class="filters">
@@ -40,13 +47,13 @@
         </div>
         {% endif %}
         <div class="card-meta">
+          {% if s.kind %}<span class="pill prd">{{ s.kind | upper }}{% if s.stage %} · {{ s.stage }}{% endif %}</span>{% endif %}
           {{ s.references }} references · {{ s.embedded }} embedded
           {% if s.broken %}<span class="pill err">{{ s.broken }} broken</span>{% else %}<span class="pill ok">all resolve</span>{% endif %}
           {% if s.changed %}<span class="pill warn">{{ s.changed }} changed</span>{% endif %}
         </div>
         {% if s.plan %}
         <div class="progress" title="{{ s.settled }} settled, {{ s.written }} written and waiting, {{ s.proposed }} not written yet">
-          {% if s.kind %}<span class="pill prd">{{ s.kind | upper }}</span>{% endif %}
           <span class="meter"><span style="width:{{ (100 * s.settled / s.plan) | round | int }}%"></span></span>
           {{ s.plan_status }}: {{ s.settled }} of {{ s.plan }} settled{% if s.written %}, {{ s.written }} to settle{% endif %}
         </div>

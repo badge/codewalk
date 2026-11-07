@@ -4,6 +4,8 @@
     <span class="kind k-{{ kind }}">{{ kind }}</span>
     <span class="def-id">{{ d.words if d and kind == "term" else id }}</span>
     {% if d and d.status %}<span class="status s-{{ d.status }}">{{ d.status }}</span>{% endif %}
+    {% if change %}<span class="spacer"></span><span class="badge how how-{{ change.how }}">{{ {"new": "new", "changed": "changed", "quoted": "as in the spec"}[change.how] }}</span>{% endif %}
   </div>
   <div class="def-text">{{ body }}</div>
+  {% if change and change.how == "changed" %}<div class="def-was">In the spec now: {{ change.was }}</div>{% endif %}
 </div>

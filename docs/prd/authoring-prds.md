@@ -2,7 +2,7 @@
 title: "Authoring PRDs"
 summary: "A PRD goes from the problem to prose, a spec and the shape of the code, in stages, in one file that reads on its own, with its spec shown against the spec as it stands."
 kind: prd
-stage: code
+stage: work
 tags: [prd, spec]
 related: ["../walkthrough.md"]
 ---
@@ -232,6 +232,26 @@ or change a branch or a worktree.
 
 ## The code
 
+> [!note] @claude: As built, every block below is settled: each shows the code as it was
+> written, with the draft kept beside it. Where they differ:
+>
+> - **Signatures** filled out as drafted, with their docstrings in full.
+> - **One pattern for a version**, `tracey.VERSION`, which `REQ`, both `MARKER`s and the
+>   spec view's and renderer's requirement lines all use, so they can't disagree.
+> - **Refusals** the outline didn't spell out: `App::set_stage` refuses a stage that isn't
+>   one, or a file that isn't a PRD; `prd::start` a title with nothing to name a file
+>   from; and `App::start_prd` turns "there's one there already" into a 409, as the
+>   server does for other refusals.
+> - **More than the outline named,** each implementing a requirement: every PRD is a
+>   walkthrough whether it makes a reference or not, so `codewalk check` reads one at the
+>   problem stage (`prd.check`); the glossary skips PRDs by their front matter
+>   (`terms.is_prd`) and a PRD's citations look in its own definitions (`term.errors+2`);
+>   a trace carries its version (`spec.traces+2`); a PRD's page shows its requirements as
+>   cards, a changed one word by word against the spec (`prd.compare`); the stage control
+>   writes the front matter through `doc.set_front_matter` (`prd.stage-set`); and a
+>   paragraph that's only an HTML comment isn't shown, so the template's guidance stays in
+>   the editor (`prd.template`).
+
 The shape of the change, in the order of the spec: the data model in full, and the code
 that implements each requirement, in full where it's intricate and by its signature where
 it's routine. Changes to code that exists are in `walk proposed change` blocks, which
@@ -247,7 +267,7 @@ is, linked to its file, with the draft against it: the new fields are the added 
 
 A requirement carries its version, and one read from a PRD can be a removal:
 
-```walk proposed change python
+```walk settled python
 Requirement
 class Requirement(BaseModel):
     id: str
@@ -262,7 +282,7 @@ class Requirement(BaseModel):
 
 A trace carries the version it names:
 
-```walk proposed change python
+```walk settled python
 Symbol
 class Symbol(BaseModel):
     """One thing a walkthrough can point at."""
@@ -305,13 +325,13 @@ class Symbol(BaseModel):
 A PRD has a stage. The stages are a type of their own, in `codewalk/walk/doc.py` beside
 [[FrontMatter]], which reads it:
 
-```walk proposed python
+```walk settled python
 doc::Stage
 # The stages a PRD goes through, in order
 Stage = Literal["problem", "prose", "spec", "code", "work"]
 ```
 
-```walk proposed change python
+```walk settled python
 FrontMatter
 class FrontMatter(BaseModel):
     """What a walkthrough says about itself, in YAML at its top.
@@ -346,7 +366,7 @@ class FrontMatter(BaseModel):
 
 The index's summary of a walkthrough, and `codewalk context`'s, carry it:
 
-```walk proposed change python
+```walk settled python
 Summary
 class Summary(BaseModel):
     """One walkthrough, as the index shows it."""
@@ -391,7 +411,7 @@ class Summary(BaseModel):
         return int(100 * self.reviewed / self.embedded) if self.embedded else 100
 ```
 
-```walk proposed change python
+```walk settled python
 Brief
 class Brief(BaseModel):
     walkthrough: str
@@ -414,7 +434,7 @@ What a PRD proposes for the spec, each requirement, term or fact against the spe
 stands, is a new model, in a new module for PRDs, `codewalk/walk/prd.py`, beside the
 walkthroughs it reads ([[Walk]]):
 
-```walk proposed python
+```walk settled python
 prd::SpecChange
 class SpecChange(BaseModel):
     """A requirement, term or fact a PRD proposes, as it stands against the spec."""
@@ -435,7 +455,7 @@ class SpecChange(BaseModel):
 
 A proposal can be a change to code that exists:
 
-```walk proposed change python
+```walk settled python
 Ref
 class Ref(BaseModel):
     """One reference a walkthrough makes, and what it resolved to."""
@@ -482,12 +502,12 @@ class Ref(BaseModel):
 The two patterns take an optional `+N` after the ID, and the requirement line an optional
 `removed`, which only a PRD's reading of it accepts:
 
-```walk proposed change python
+```walk settled python
 requirements::REQ
 REQ = re.compile(rf"^([a-z][a-z0-9]*)\[({tracey.ID})(?:\+([1-9][0-9]*))?\](?:[ \t]+(removed))?\s*$")
 ```
 
-```walk proposed change python
+```walk settled python
 tracey::MARKER
 # A requirement's marker in code: a prefix, then `[impl id]` or `[verify id]`, with the
 # version it names after the ID, `+N`, if it isn't 1
@@ -499,7 +519,7 @@ Reading a file's requirements becomes a function of its text, in
 for the spec and a PRD for its own; the terms the same, in `codewalk/spec/terms.py` beside
 [[Glossary]], for [[Glossary::refresh]]:
 
-```walk proposed python
+```walk settled python
 requirements::parse
 # r[impl spec.prefix+2]
 def parse(rel: str, text: str, prefixes: set[str], removals: bool = False) -> list[Requirement]:
@@ -522,7 +542,7 @@ def parse(rel: str, text: str, prefixes: set[str], removals: bool = False) -> li
     """
 ```
 
-```walk proposed python
+```walk settled python
 terms::parse
 # r[impl term.define]
 def parse(rel: str, text: str) -> list[Definition]:
@@ -540,7 +560,7 @@ definitions never join the spec's (`prd.terms`); the spec index never read PRDs 
 The comparison is the heart of this, so in full; it goes in `codewalk/walk/prd.py`, with
 [[?prd::SpecChange]]:
 
-```walk proposed python
+```walk settled python
 prd::spec_changes
 # r[impl prd.requirements]
 # r[impl prd.compare]
@@ -582,7 +602,7 @@ Its errors, and anything written ahead of its stage, are among the PRD's problem
 `codewalk check` and the PRD's page both report them. A new method of [[Walk]], which
 [[Walk::problems]] calls:
 
-```walk proposed python
+```walk settled python
 Walk::prd_problems
 # r[impl prd.check]
 # r[impl prd.stage-gate]
@@ -613,7 +633,7 @@ whose Markdown says, for each PRD, what may be written yet (`prd.stage`,
 `prd.stage-gate`). The PRD's page has a control to set it, a new method of [[App]], the
 server, beside [[App::settle]] and [[App::agree]]:
 
-```walk proposed python
+```walk settled python
 App::set_stage
 # r[impl prd.stage-set]
 def set_stage(self, rel: str, stage: Stage) -> dict:
@@ -622,7 +642,7 @@ def set_stage(self, rel: str, stage: Stage) -> dict:
 
 ### Proposing a change
 
-```walk proposed change python
+```walk settled python
 Walk::_proposal
 # r[impl proposal.change]
 def _proposal(self, tok) -> Ref:
@@ -645,7 +665,7 @@ def _proposal(self, tok) -> Ref:
     return self._resolve(ref)
 ```
 
-```walk proposed change python
+```walk settled python
 Walk::progress
 # r[impl proposal.progress]
 # r[impl proposal.change]
@@ -718,7 +738,7 @@ the same template, adding what was asked, through a new function in
 `codewalk/walk/prd.py`, a new method of [[App]], and a new function in `codewalk/walk/notes.py`
 beside [[notes::ask]]:
 
-```walk proposed python
+```walk settled python
 prd::start
 # r[impl prd.start]
 def start(ctx: Context, title: str, ask: str) -> str:
@@ -745,14 +765,14 @@ def start(ctx: Context, title: str, ask: str) -> str:
     """
 ```
 
-```walk proposed python
+```walk settled python
 App::start_prd
 # r[impl prd.start]
 def start_prd(self, title: str, ask: str) -> dict:
     """Start a PRD from the index, and say where to open it."""
 ```
 
-```walk proposed python
+```walk settled python
 notes::request
 def request(text: str, author: str | None, body: str) -> str:
     """`text` with a standing request under its first heading, where it's read first."""
@@ -762,69 +782,69 @@ def request(text: str, author: str | None, body: str) -> str:
 
 One or more for each requirement, in `tests/test_codewalk.py`:
 
-```walk proposed python
+```walk settled python
 test_a_versioned_requirement_and_its_traces_are_read_with_their_versions
 # r[verify spec.prefix+2]
 # r[verify spec.traces+2]
 def test_a_versioned_requirement_and_its_traces_are_read_with_their_versions(repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_a_prds_requirements_and_terms_are_its_own_not_the_specs
 # r[verify prd.requirements]
 # r[verify prd.terms]
 def test_a_prds_requirements_and_terms_are_its_own_not_the_specs(repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_a_prds_requirements_are_new_changed_removed_quoted_or_in_error_against_the_spec
 # r[verify prd.compare]
 def test_a_prds_requirements_are_new_changed_removed_quoted_or_in_error_against_the_spec(repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_a_term_a_prd_redefines_or_defines_and_cites_is_not_an_error
 # r[verify term.errors+2]
 def test_a_term_a_prd_redefines_or_defines_and_cites_is_not_an_error(repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_check_fails_on_a_prd_that_changes_a_requirement_without_a_new_version
 # r[verify prd.check]
 def test_check_fails_on_a_prd_that_changes_a_requirement_without_a_new_version(repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_a_prds_stage_is_read_from_its_front_matter_and_shown
 # r[verify prd.stage]
 def test_a_prds_stage_is_read_from_its_front_matter_and_shown(client, repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_setting_a_prds_stage_from_its_page_writes_its_front_matter
 # r[verify prd.stage-set]
 def test_setting_a_prds_stage_from_its_page_writes_its_front_matter(client, repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_work_written_ahead_of_a_prds_stage_is_a_warning
 # r[verify prd.stage-gate]
 def test_work_written_ahead_of_a_prds_stage_is_a_warning(repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_a_new_prd_has_a_section_for_each_stage_and_nothing_in_hand
 # r[verify prd.template]
 def test_a_new_prd_has_a_section_for_each_stage_and_nothing_in_hand(repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_a_proposed_change_shows_its_draft_against_the_code_until_settled
 # r[verify proposal.change]
 def test_a_proposed_change_shows_its_draft_against_the_code_until_settled(repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_starting_a_prd_from_the_index_writes_it_with_what_was_asked
 # r[verify prd.start]
 def test_starting_a_prd_from_the_index_writes_it_with_what_was_asked(client, repo): ...
@@ -846,18 +866,21 @@ bumped. (tracey's documentation, on versioning.)
 
 ## Questions
 
-> [!question] @claude: `prd.stage-gate`'s warnings mean `codewalk check --strict`, which
-> fails on any warning, fails on a PRD with work written ahead of its stage. That seems
-> right for a release check, where a PRD in that state is unfinished, but it could
-> surprise. Should stage warnings be left out of `--strict`?
-
-> [!question] @claude: Is the outline of the code agreed, so this PRD can move to
-> `stage: work`?
-
 ## Changelog
 
 What was asked here and how it was settled, newest first.
 
+- 2026-11-07 (the work): The prose and requirements moved into the spec
+  ([PRDs](../spec/prds.md), with `spec.prefix+2`, `spec.traces+2` and `term.errors+2` in
+  [Specs and terms](../spec/specs.md) and `proposal.change` in
+  [the conversation](../spec/conversation.md)); the code and its tests written, and every
+  proposal settled, with where the code departs from its outline in a note under
+  [The code](#the-code).
+- 2026-11-07 (to the work): **question** @claude: Is the outline of the code agreed? →
+  @matthew, in conversation: Yes. Set `stage: work`: the prose and requirements moved into
+  [the spec](../spec/prds.md), and the code written.
+- 2026-11-07 (`--strict`): **question** @claude: Should stage warnings count under
+  `codewalk check --strict`? → **answer** @matthew, in conversation: Yes.
 - 2026-11-07 (to the code stage): **question** @claude: Is the spec broadly agreed, so this
   PRD can move to `stage: code`? → @matthew, in conversation: Yes. Set `stage: code`, and
   the outline of the code and tests written in [The code](#the-code).

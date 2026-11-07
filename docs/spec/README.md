@@ -21,6 +21,7 @@ run through all of codewalk are defined here, below; the glossary collects every
 
 - [Walkthroughs](walkthroughs.md): naming code, showing it, checking it, reviewing it.
 - [The conversation](conversation.md): notes, proposals, and what's in hand.
+- [PRDs](prds.md): agreeing a change before making it, in stages, in a file of its own.
 - [Specs and terms](specs.md): prose beside its requirements, and a glossary.
 - [The browser](browser.md): reading, editing, and moving between them.
 

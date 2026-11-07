@@ -10,6 +10,7 @@ preview can be scrolled together and a click in one finds its place in the other
 
 from __future__ import annotations
 
+import difflib
 import html
 import json
 import os
@@ -27,6 +28,7 @@ from codewalk.spec.requirements import Requirement
 from codewalk.spec.terms import DEF_LINE, Definition
 from codewalk.walk.doc import Ref, Walk, embed_line
 from codewalk.walk.notes import KINDS, blocks, parse_notes, threads
+from codewalk.walk.prd import SpecChange, spec_changes
 from codewalk.walk.review import diff
 
 templates = Environment(loader=PackageLoader("codewalk.web"), autoescape=select_autoescape(), trim_blocks=True, lstrip_blocks=True)
@@ -46,6 +48,8 @@ templates.filters["inline"] = inline_md
 templates.filters["plain"] = plain_md
 REQ_IN_CODE = tracey.MARKER
 NOTE_HEAD = re.compile(rf"^(<p[^>]*>)\[!({'|'.join(KINDS)})\][ \t]*(?:@([\w.\-]+):?)?[ \t]*", re.IGNORECASE)
+# A paragraph that's only an HTML comment, which Markdown elsewhere doesn't show either
+COMMENT = re.compile(r"\A\s*<!--.*?-->\s*\Z", re.DOTALL)
 # A note's kind and author, at the start of its text: never linked to a term, so a note
 # whose kind is also a term (`note`, `request`) is still read as one
 NOTE_MARK = re.compile(rf"^\[!(?:{'|'.join(KINDS)})\][ \t]*(?:@[\w.\-]+:?)?", re.IGNORECASE)
@@ -130,6 +134,20 @@ def _dedent_html(line: str, n: int) -> str:
     return m.group(1) + line[m.end() :] if m else line
 
 
+def word_diff(before: str, after: str) -> Markup:
+    """`after` against `before`, word by word: what's gone struck out, what's new marked."""
+    a, b = before.split(), after.split()
+    out = []
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes():
+        if op in ("delete", "replace"):
+            out.append(f"<del>{html.escape(' '.join(a[i1:i2]))}</del>")
+        if op in ("insert", "replace"):
+            out.append(f"<ins>{html.escape(' '.join(b[j1:j2]))}</ins>")
+        if op == "equal":
+            out.append(html.escape(" ".join(a[i1:i2])))
+    return Markup(" ".join(out))
+
+
 def diff_rows(before: str, after: str, context: int = 2) -> list[dict]:
     """What changed, as the changed lines with a little context either side.
 
@@ -179,6 +197,8 @@ class Renderer:
         # A spec file: `r[id]` paragraphs are requirements, shown as such
         self.spec_mode = spec_mode
         self.ctx = walk.ctx
+        # A PRD: what it proposes for the spec, by the line each is written on
+        self.prd: dict[int, SpecChange] = {c.line: c for c in spec_changes(walk)} if walk.meta.kind == "prd" else {}
         self.symbols: dict[str, dict] = {}
         self.requirements: dict[str, dict] = {}
         # Terms and facts it mentions or cites, by `t:id` or `f:id`
@@ -233,6 +253,7 @@ class Renderer:
             ref=ref, req=req, text=requirement_html(req.text), traces=traces, slug=_slug(req.id)
         )
 
+    # r[impl proposal.change]
     def proposal(self, ref: Ref, end: int) -> str:
         """A `walk proposed` block: the draft, or once the name exists, what was written.
 
@@ -259,7 +280,10 @@ class Renderer:
             raw = files.lines(s.file)[s.start - 1 : s.end]
             indent = min((len(l) - len(l.lstrip()) for l in raw if l.strip()), default=0)
             rows = [(n, Markup(_dedent_html(highlighted[n - 1], indent) or " ")) for n in range(s.start, s.end + 1)]
-            diff = diff_rows(ref.draft or "", "\n".join(l[indent:] for l in raw), context=3)
+            current = "\n".join(l[indent:] for l in raw)
+            # A change shows what there is, then what there will be; a written proposal what
+            # was planned, then what was written
+            diff = diff_rows(current, ref.draft or "", context=3) if ref.change else diff_rows(ref.draft or "", current, context=3)
         # Taken: the name is already several symbols' (not just close to some)
         ambiguous = len(ref.candidates) > 1 and all(c.name == ref.target.split("::")[-1] for c in ref.candidates)
         return templates.get_template("proposal.html").render(
@@ -346,8 +370,38 @@ class Renderer:
         body = re.sub(r"^[tf]\[[^\]]+\][^\n<]*\s*", "", body)
         if d:
             self.note_definition(d)
+        change = self.prd.get(env["line"])
         return templates.get_template("definition_def.html").render(
-            kind="term" if kind == "t" else "fact", id=did, d=d, slug=_slug(did), line=env["line"], body=Markup(body)
+            kind="term" if kind == "t" else "fact", id=did, d=d, slug=_slug(did), line=env["line"], body=Markup(body), change=change
+        )
+
+    # r[impl prd.compare]
+    # r[impl prd.terms]
+    def proposed_requirement(self, c: SpecChange, para, inline, env) -> str:
+        """A requirement a PRD proposes, against the spec: new, changed, removed, quoted, or in error.
+
+        Parameters
+        ----------
+        c : SpecChange
+            How it stands against the spec.
+        para : Token
+            Its paragraph_open token.
+        inline : Token
+            Its inline token, with the marker and the text.
+        env : dict
+            markdown-it's render environment.
+
+        Returns
+        -------
+        str
+            The HTML.
+        """
+        env["line"] = para.map[0] + 1 if para.map else env["line"]
+        md = self.walk.md
+        body = md.renderer.renderInline(inline.children or [], md.options, env)
+        body = re.sub(r"^[a-z][a-z0-9]*\[[^\]]+\][^\n<]*\s*", "", body)
+        return templates.get_template("prd_requirement.html").render(
+            c=c, slug=_slug(c.id), line=env["line"], body=Markup(body), words=word_diff(c.was or "", c.text)
         )
 
     # r[impl term.cite]
@@ -452,7 +506,7 @@ class Renderer:
         raw = [files.lines(s.file)[n - 1] for n in shown]
         last = shown[-1]
         for line in raw:
-            self.note_requirements([tracey.key(p, rid) for p, _, rid in REQ_IN_CODE.findall(line)])
+            self.note_requirements([tracey.key(p, rid) for p, _, rid, _ in REQ_IN_CODE.findall(line)])
         # Shown without the indent it has inside its impl, class or module
         indent = min((len(l) - len(l.lstrip()) for l in raw if l.strip()), default=0)
         # A gap between runs is a row of its own, with no line number
@@ -605,11 +659,29 @@ class Renderer:
                 self.spec_mode
                 and tok.type == "paragraph_open"
                 and k + 1 < len(tokens)
-                and (m := re.match(rf"^([a-z][a-z0-9]*)\[({tracey.ID})\]", tokens[k + 1].content))
+                and (m := re.match(rf"^([a-z][a-z0-9]*)\[({tracey.ID}){tracey.VERSION}\]", tokens[k + 1].content))
                 and m.group(1) in self.ctx.spec.prefixes
             ):
                 # A requirement: rendered by `requirement_def` from its inline token
                 parts[-1] += self.requirement_def(tracey.key(m.group(1), m.group(2)), tok, tokens[k + 1], env)
+                tokens[k + 1].type = "_done"
+                skip_close = True
+                continue
+            if tok.type == "paragraph_open" and k + 1 < len(tokens) and COMMENT.match(tokens[k + 1].content):
+                # A comment, as the PRD template's guidance is: for whoever edits it, not shown
+                tokens[k + 1].type = "_done"
+                skip_close = True
+                continue
+            if (
+                self.prd
+                and tok.type == "paragraph_open"
+                and tok.map
+                and (c := self.prd.get(tok.map[0] + 1))
+                and c.kind == "requirement"
+                and k + 1 < len(tokens)
+            ):
+                # A requirement a PRD proposes: shown against the spec
+                parts[-1] += self.proposed_requirement(c, tok, tokens[k + 1], env)
                 tokens[k + 1].type = "_done"
                 skip_close = True
                 continue

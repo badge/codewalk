@@ -273,6 +273,29 @@ def ask(text: str, after_line: int, author: str | None, body: str, kind: Kind = 
     return "\n".join(lines[:at] + block + lines[at:])
 
 
+# r[impl prd.start]
+def request(text: str, author: str | None, body: str) -> str:
+    """`text` with a standing request under its first heading, where it's read first.
+
+    Parameters
+    ----------
+    text : str
+        The walkthrough's Markdown.
+    author : str or None
+        Who's asking.
+    body : str
+        What they want.
+
+    Returns
+    -------
+    str
+        The Markdown with the request in.
+    """
+    lines = text.split("\n")
+    at = next((i + 1 for i, line in enumerate(lines) if line.startswith("# ")), 0)
+    return "\n".join(lines[:at] + ["", *_quote("request", author, body)] + lines[at:])
+
+
 # r[impl note.ask-here]
 def ask_about(text: str, line: int, author: str | None, body: str) -> str:
     """`text` with a new question about the reference on line `line` of a `walk` block.

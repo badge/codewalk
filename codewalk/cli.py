@@ -109,15 +109,14 @@ def init(dry_run: bool, command: str | None, walkthroughs: str) -> None:
 @click.option("--prd", is_flag=True, help="A PRD: a change proposed in full, to be settled as it's made.")
 def new(path: str, title: str, prd: bool) -> None:
     """Start a walkthrough at PATH (from the repository root)."""
-    from importlib import resources
-
     ctx = context()
     target = ctx.root / path
     if target.exists():
         raise click.ClickException(f"{path} exists already")
-    author = ctx.config.who(ctx.root) or "you"
     if prd:
-        text = (resources.files("codewalk") / "setup" / "prd.md").read_text().replace("{title}", title).replace("{author}", author)
+        from codewalk.walk.prd import template
+
+        text = template(title)
     else:
         text = f"---\nsummary: \ntags: []\n---\n\n# {title}\n\n```walk\n```\n"
     target.parent.mkdir(parents=True, exist_ok=True)

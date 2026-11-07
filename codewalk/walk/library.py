@@ -15,7 +15,7 @@ from pathlib import PurePosixPath
 from pydantic import BaseModel
 
 from codewalk.spec import prose
-from codewalk.walk.doc import Context, Walk
+from codewalk.walk.doc import Context, Stage, Walk
 
 
 class Summary(BaseModel):
@@ -39,6 +39,8 @@ class Summary(BaseModel):
     changed: int
     # "prd", say, from its front matter
     kind: str | None = None
+    # For a PRD, its stage, from its front matter
+    stage: Stage | None = None
     # Its proposals: not written yet, written, settled
     proposed: int = 0
     written: int = 0
@@ -107,6 +109,7 @@ class Library(BaseModel):
                 broken=sum(1 for p in problems if p.severity == "error"),
                 changed=sum(1 for p in problems if p.severity == "warning"),
                 kind=w.meta.kind,
+                stage=(w.meta.stage or "problem") if w.meta.kind == "prd" else None,
                 **w.progress().model_dump(),
             )
         for s in out.values():

@@ -18,8 +18,11 @@ FILE = Path(".config/tracey/config.styx")
 # spec writes its requirements with a prefix other than `r`
 ID = r"[a-z0-9][a-z0-9.\-]*"
 QUALIFIED = rf"(?:[a-z][a-z0-9]*:)?{ID}"
-# A requirement's marker in code: a prefix, then `[impl id]` or `[verify id]`
-MARKER = re.compile(rf"\b([a-z][a-z0-9]*)\[(impl|verify)\s+({ID})\]")
+# A requirement's version after its ID, `+N`, if it isn't 1 (tracey's versioning)
+VERSION = r"(?:\+([1-9][0-9]*))?"
+# A requirement's marker in code: a prefix, then `[impl id]` or `[verify id]`, with the
+# version it names after the ID, `+N`, if it isn't 1
+MARKER = re.compile(rf"\b([a-z][a-z0-9]*)\[(impl|verify)\s+({ID}){VERSION}\]")
 # `t` and `f` are the glossary's
 RESERVED = {"t", "f"}
 

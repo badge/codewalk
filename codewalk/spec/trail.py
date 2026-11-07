@@ -68,12 +68,12 @@ def links(walk: Walk) -> list[Link]:
     for ref in walk.refs:
         at = block_of(ref.line)
         if ref.kind == "proposal":
-            for prefix, kind, rid in MARKER.findall(ref.draft or ""):
+            for prefix, kind, rid, _ in MARKER.findall(ref.draft or ""):
                 rid = tracey.key(prefix, rid)
                 out.append(Link(id=rid, role="proposes" if kind == "impl" else "proposes a test of", line=at))
         elif ref.kind == "embed" and ref.symbol:
             text = ref.symbol.text(files)
-            for prefix, kind, rid in MARKER.findall(text):
+            for prefix, kind, rid, _ in MARKER.findall(text):
                 rid = tracey.key(prefix, rid)
                 out.append(Link(id=rid, role="implements" if kind == "impl" else "verifies", line=at))
         elif ref.kind == "embed" and ref.requirement:

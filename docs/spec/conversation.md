@@ -34,9 +34,13 @@ them, in the thread under it, which starts one if there's none. Until it's writt
 proposal is then agreed, and says so on the page and in `codewalk context`, so the agent
 knows it can be written (`proposal.agree`). Once it does, the proposal shows what was written against the
 draft, and can be settled: the block becomes `walk settled`, keeping the draft, so what
-was planned and what was done stay side by side (`proposal.settle`). A PRD is a
-walkthrough whose code is all proposed, so its progress is how much is settled
-(`proposal.progress`).
+was planned and what was done stay side by side (`proposal.settle`). A walkthrough's
+progress is how much of what it proposes is written and settled (`proposal.progress`).
+
+A change to code that exists is proposed in a `walk proposed change` block, under the name
+it has. It shows what there is, then what there will be: the difference from the code as
+it is to the draft. It stays proposed until it's settled, since code that exists can't
+say whether the change has been made (`proposal.change`).
 
 ### What's in hand
 
@@ -59,10 +63,6 @@ open while any note in it, at any depth, is open.
 t[request]
 A note asking for something that applies throughout rather than once. It stays open
 until a done after it.
-
-t[prd]
-A walkthrough whose code is all proposed, written before the work; its progress is how
-much of it is settled.
 
 t[proposal]
 Code drafted in a `walk proposed` block under the name it will have, before it's
@@ -132,6 +132,13 @@ context` MUST list it as agreed, with the decision.
 r[proposal.settle]
 Settling a written proposal MUST turn its block into `walk settled`, keeping the draft,
 and a settled block MUST show the code as it is, with the difference from its draft.
+
+r[proposal.change]
+A `walk proposed change` block MUST be read as a change proposed to the symbol it names,
+showing the difference from the symbol's code as it is to the draft, so what the change
+adds shows as added and what it takes out as removed, and counted as proposed until it's
+settled; settling it MUST turn it into a `walk settled` block, keeping the draft. A
+change to a name that doesn't resolve MUST be reported as broken.
 
 r[proposal.progress]
 A walkthrough's progress MUST be counted as how many of its proposals are not written,

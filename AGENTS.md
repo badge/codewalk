@@ -96,7 +96,10 @@ references.
 **Before a change of any size**, write or update a walkthrough proposing it: what will
 change and why, with the existing code named in `walk` blocks and the new code drafted in
 `walk proposed` blocks under the name it will have, with the requirement markers it will
-carry. A PRD is such a walkthrough: start one with `uv run codewalk new PATH --title T --prd`.
+carry. A PRD is such a walkthrough, written in stages (the problem, the prose, the spec,
+the code, the work), with its spec kept in it until the work: start one with
+`uv run codewalk new PATH --title T --prd`, and write only what its `stage` allows, which
+`uv run codewalk context` says. A person moves it on from one stage to the next.
 Ask what you need to know as `> [!question] @agent: …` in the walkthrough, under what
 it's about, and stop for an answer if you can't go on without one.
 

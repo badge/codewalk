@@ -33,6 +33,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+# A PRD's front matter: its definitions are its own proposals, not the glossary's
+PRD = re.compile(r"\A---\n(?:.*\n)*?kind:[ \t]*[\"']?prd[\"']?[ \t]*\n(?:.*\n)*?---", re.MULTILINE)
 DEF_LINE = re.compile(r"^(t|f)\[([a-z0-9][a-z0-9.\-]*)\](?:[ \t]+(documented|observed|assumed))?[ \t]*$")
 STATUSES = ("documented", "observed", "assumed")
 
@@ -50,6 +52,42 @@ class Definition(BaseModel):
     def words(self) -> str:
         """A term as it's written in prose."""
         return self.id.replace("-", " ")
+
+
+# r[impl term.define]
+def parse(rel: str, text: str) -> list[Definition]:
+    """The terms and facts defined in one file's text, in order.
+
+    Parameters
+    ----------
+    rel : str
+        The file, from the root.
+    text : str
+        Its Markdown.
+
+    Returns
+    -------
+    list of Definition
+    """
+    out = []
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if not (m := DEF_LINE.match(line)):
+            continue
+        body = []
+        for nxt in lines[i + 1 :]:
+            if not nxt.strip() or DEF_LINE.match(nxt) or nxt.startswith("r["):
+                break
+            body.append(nxt.strip())
+        kind = "term" if m.group(1) == "t" else "fact"
+        status = (m.group(3) or "assumed") if kind == "fact" else None
+        out.append(Definition(kind=kind, id=m.group(2), status=status, file=rel, line=i + 1, text=" ".join(body)))
+    return out
+
+
+def is_prd(text: str) -> bool:
+    """Whether a file's front matter says it's a PRD."""
+    return bool(PRD.match(text))
 
 
 class Glossary:
@@ -75,7 +113,8 @@ class Glossary:
         self.refresh()
 
     # r[impl term.define]
-    # r[impl term.errors]
+    # r[impl term.errors+2]
+    # r[impl prd.terms]
     def refresh(self) -> bool:
         paths = sorted({p for g in self.globs for p in self.root.glob(g) if p.is_file() and p.suffix == ".md"})
         mtimes = {str(p.relative_to(self.root)): p.stat().st_mtime for p in paths}
@@ -87,28 +126,14 @@ class Glossary:
         dups: dict[str, list[Definition]] = {}
         for p in paths:
             rel = str(p.relative_to(self.root))
-            lines = p.read_text().split("\n")
-            for i, line in enumerate(lines):
-                m = DEF_LINE.match(line)
-                if not m:
-                    continue
-                body = []
-                for nxt in lines[i + 1 :]:
-                    if not nxt.strip() or DEF_LINE.match(nxt) or nxt.startswith("r["):
-                        break
-                    body.append(nxt.strip())
-                kind = "term" if m.group(1) == "t" else "fact"
-                d = Definition(
-                    kind=kind,
-                    id=m.group(2),
-                    status=(m.group(3) or "assumed") if kind == "fact" else None,
-                    file=rel,
-                    line=i + 1,
-                    text=" ".join(body),
-                )
-                table = terms if kind == "term" else facts
+            text = p.read_text()
+            # A PRD's definitions are its own, proposed, not the spec's
+            if is_prd(text):
+                continue
+            for d in parse(rel, text):
+                table = terms if d.kind == "term" else facts
                 if d.id in table:
-                    dups.setdefault(f"{m.group(1)}:{d.id}", [table[d.id]]).append(d)
+                    dups.setdefault(f"{d.kind[0]}:{d.id}", [table[d.id]]).append(d)
                 table[d.id] = d
         self.terms, self.facts, self.duplicates = terms, facts, dups
         self._pattern = None
