@@ -55,8 +55,7 @@ Glossary::mentions
 
 ### A codewalk, and a PRD
 
-A codewalk explains a part of the code as it stands, and that's what codewalk's pages
-call it from now on, not a walkthrough. Questions about a codewalk are asked and answered
+A codewalk explains a part of the code as it stands. Questions about a codewalk are asked and answered
 in it, so it gets better. But it doesn't propose: a `walk proposed` block belongs in a PRD,
 and one in a codewalk that isn't a PRD is a warning (`proposal.draft+2`). Progress is a
 PRD's, so only a PRD shows it (`proposal.progress+2`).
@@ -66,6 +65,22 @@ to start a PRD from it, as the index does, with what was asked filled in from th
 and the thread then says where the PRD is, so a reader of the codewalk can follow it
 (`prd.from-thread`). The `Library::uses` proposal in *codewalk, walked through* moves to
 a PRD of its own.
+
+### The word
+
+"Walkthrough" goes, everywhere, for "codewalk": what the pages and the command line say,
+the README, the agent instructions and skills, the spec's prose, terms and requirements,
+and the names in the code (`Context.walkthroughs`, `Library.walkthroughs`, the
+`--walkthroughs` option of `codewalk init`, and the rest). Files named for it are renamed
+too: `docs/spec/walkthroughs.md` and *codewalk, walked through*'s `docs/walkthrough.md`,
+whose reviews in `codewalk.review.json`, recorded under its path, move with it. `walk`
+stays: it's the block's syntax, and short for codewalk anyway.
+
+A requirement whose only change is that word is rewritten where it is, without its version
+bumped. That's against how the spec is meant to change, and done once, knowingly: nothing
+holds the code to the spec with tracey yet, so no marker would go stale, and bumping some
+thirty requirements for a word would bury the changes that matter. The term
+`walkthrough` goes from the top-level spec, replaced by `codewalk` (below).
 
 ### Words that aren't always terms
 
@@ -147,22 +162,18 @@ codewalk has called a walkthrough.)
 
 ## Questions
 
-> [!question] @claude: How far should "codewalk" replace "walkthrough"? I've written it
-> for what the pages say, and the spec's prose from here on. Every requirement that says
-> "walkthrough" (about thirty) would need its version bumped to change it, which tracey
-> then reports as stale code until each marker is bumped too, for no change in behaviour;
-> and the code's names (`Walk`, `walkthroughs()`, the `docs` setting) are another rename
-> again. I'd leave both, and change a requirement's word when it changes for some other
-> reason. Is that right?
-
-> [!question] @claude: Is a term defined `cited-only` enough, or do you also want to keep
-> a single use of a term's word unlinked? With `cited-only`, `target` would be linked only
-> where it's cited, everywhere; a mark for one use would be finer, but it's one more piece
-> of syntax, and the term itself is usually what's wrong.
+> [!question] @claude: Is the spec broadly agreed, so this PRD can move to `stage: code`?
 
 ## Changelog
 
 What was asked here and how it was settled, newest first.
 
+- 2026-11-07 (the word): **question** @claude: How far should "codewalk" replace
+  "walkthrough"? → **answer** @matthew, in conversation: Everywhere; rewrite the specs
+  without bumping the versions, since tracey isn't used on the codebase yet. Written into
+  [The word](#the-word).
+- 2026-11-07 (a per-use mark): **question** @claude: Is a term defined `cited-only` enough,
+  or should a single use of a term's word be markable as plain? → **answer** @matthew, in
+  conversation: `cited-only` is enough; leave it as it is.
 - 2026-11-07: Started at the problem stage by @matthew, who asked to go straight to the
   spec stage: the problem, the prose and the spec written, and set to `stage: spec`.
