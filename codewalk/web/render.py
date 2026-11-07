@@ -46,6 +46,9 @@ templates.filters["inline"] = inline_md
 templates.filters["plain"] = plain_md
 REQ_IN_CODE = tracey.MARKER
 NOTE_HEAD = re.compile(rf"^(<p[^>]*>)\[!({'|'.join(KINDS)})\][ \t]*(?:@([\w.\-]+):?)?[ \t]*", re.IGNORECASE)
+# A note's kind and author, at the start of its text: never linked to a term, so a note
+# whose kind is also a term (`note`, `request`) is still read as one
+NOTE_MARK = re.compile(rf"^\[!(?:{'|'.join(KINDS)})\][ \t]*(?:@[\w.\-]+:?)?", re.IGNORECASE)
 _plain = MarkdownIt("commonmark")
 
 
@@ -354,6 +357,8 @@ class Renderer:
         pattern = self.ctx.glossary.mentions()
         if not pattern or env.get("in_heading") or env.get("in_link"):
             return content
+        mark = NOTE_MARK.match(content)
+        head, content = (content[: mark.end()], content[mark.end() :]) if mark else ("", content)
         seen = env.setdefault("seen_terms", set())
 
         def link(m):
@@ -364,7 +369,7 @@ class Renderer:
             key = self.note_definition(d)
             return f'<a class="mention" href="{self.definition_href(d)}" data-term="{key}">{m.group(0)}</a>'
 
-        return pattern.sub(link, content)
+        return head + pattern.sub(link, content)
 
     # ---- Threads --------------------------------------------------------------------------
 

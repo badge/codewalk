@@ -819,6 +819,16 @@ def test_terms_are_cited_and_mentioned_and_unknown_ones_are_errors(repo):
     assert 'class="term fact"' in body and set(data["terms"]) == {"t:deadband", "f:market.periods"}
 
 
+# r[verify term.cite]
+# r[verify note.syntax]
+def test_a_note_whose_kind_is_a_term_is_still_a_note(repo):
+    (repo / "docs/glossary.md").write_text("# G\n\nt[note]\nA paragraph in a blockquote.\n\nt[request]\nA standing ask.\n")
+    w = walk(repo, "# W\n\n> [!note] A thought.\n\nThen:\n\n> [!request] @m: Keep it short.\n")
+    assert [t.notes[0].kind for t in w.threads] == ["note", "request"]
+    body, _ = render(w)
+    assert "A thought." in body and "Keep it short." in body and "[!" not in body
+
+
 # r[verify term.errors]
 def test_a_term_defined_twice_is_an_error_where_its_defined(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY + "\nt[deadband]\nAgain.\n")
