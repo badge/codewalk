@@ -1,9 +1,11 @@
 {% extends "base.html" %}
-{% block crumb %}<a href="/">Walkthroughs</a> / {{ rel }}{% endblock %}
+{% block crumb %}<a href="/">Codewalks</a> / {{ rel }}{% endblock %}
 {% block actions %}
   {% if errors %}<span class="pill err">{{ errors }} broken</span>{% else %}<span class="pill ok">all references resolve</span>{% endif %}
   {% if changed %}<span class="pill warn">{{ changed }} changed since review</span>{% endif %}
-  {% if summary and summary.plan %}<span class="pill{{ ' ok' if summary.plan_status == 'done' else ' prd' }}" title="{{ summary.settled }} settled, {{ summary.written }} written and waiting, {{ summary.proposed }} not written yet">{{ (summary.kind | upper ~ ' ') if summary.kind }}{{ summary.plan_status }}: {{ summary.settled }}/{{ summary.plan }} settled</span>{% endif %}
+  {% if summary and summary.plan and summary.kind == "prd" %}<span class="pill{{ ' ok' if summary.plan_status == 'done' else ' prd' }}" title="{{ summary.settled }} settled, {{ summary.written }} written and waiting, {{ summary.proposed }} not written yet">{{ (summary.kind | upper ~ ' ') if summary.kind }}{{ summary.plan_status }}: {{ summary.settled }}/{{ summary.plan }} settled</span>{% endif %}
+  {% if summary and summary.stage %}<label class="pill prd stage" title="Where this PRD is; set it when a stage is agreed">Stage
+    <select data-action="stage">{% for st in stages %}<option{{ " selected" if st == summary.stage }}>{{ st }}</option>{% endfor %}</select></label>{% endif %}
   {% if margin %}<button class="tb" data-action="toggle-margin" id="margin-toggle" title="The requirements beside the code, with their prose (m)">Requirements</button>{% endif %}
   <button class="tb" data-action="review-all" title="Mark every embedded symbol reviewed as it stands">Mark all reviewed</button>
   <a class="tb primary" href="/edit/{{ rel }}" data-action="edit" title="Edit, at this point (e)">Edit <kbd>e</kbd></a>

@@ -1,4 +1,4 @@
-"""A walkthrough as HTML, for the web view.
+"""A codewalk as HTML, for the web view.
 
 markdown-it renders the prose; codewalk takes over its fences (a `walk` block becomes the
 code it names), its links (`walk:` links become symbols) and the `[[…]]` token. The
@@ -10,6 +10,7 @@ preview can be scrolled together and a click in one finds its place in the other
 
 from __future__ import annotations
 
+import difflib
 import html
 import json
 import os
@@ -27,6 +28,7 @@ from codewalk.spec.requirements import Requirement
 from codewalk.spec.terms import DEF_LINE, Definition
 from codewalk.walk.doc import Ref, Walk, embed_line
 from codewalk.walk.notes import KINDS, blocks, parse_notes, threads
+from codewalk.walk.prd import SpecChange, spec_changes
 from codewalk.walk.review import diff
 
 templates = Environment(loader=PackageLoader("codewalk.web"), autoescape=select_autoescape(), trim_blocks=True, lstrip_blocks=True)
@@ -46,6 +48,11 @@ templates.filters["inline"] = inline_md
 templates.filters["plain"] = plain_md
 REQ_IN_CODE = tracey.MARKER
 NOTE_HEAD = re.compile(rf"^(<p[^>]*>)\[!({'|'.join(KINDS)})\][ \t]*(?:@([\w.\-]+):?)?[ \t]*", re.IGNORECASE)
+# A paragraph that's only an HTML comment, which Markdown elsewhere doesn't show either
+COMMENT = re.compile(r"\A\s*<!--.*?-->\s*\Z", re.DOTALL)
+# A note's kind and author, at the start of its text: never linked to a term, so a note
+# whose kind is also a term (`note`, `request`) is still read as one
+NOTE_MARK = re.compile(rf"^\[!(?:{'|'.join(KINDS)})\][ \t]*(?:@[\w.\-]+:?)?", re.IGNORECASE)
 _plain = MarkdownIt("commonmark")
 
 
@@ -75,7 +82,7 @@ def symbol_data(walk: Walk, s: Symbol) -> dict:
     Parameters
     ----------
     walk : Walk
-        The walkthrough the page shows.
+        The codewalk the page shows.
     s : Symbol
         The symbol.
 
@@ -127,6 +134,20 @@ def _dedent_html(line: str, n: int) -> str:
     return m.group(1) + line[m.end() :] if m else line
 
 
+def word_diff(before: str, after: str) -> Markup:
+    """`after` against `before`, word by word: what's gone struck out, what's new marked."""
+    a, b = before.split(), after.split()
+    out = []
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes():
+        if op in ("delete", "replace"):
+            out.append(f"<del>{html.escape(' '.join(a[i1:i2]))}</del>")
+        if op in ("insert", "replace"):
+            out.append(f"<ins>{html.escape(' '.join(b[j1:j2]))}</ins>")
+        if op == "equal":
+            out.append(html.escape(" ".join(a[i1:i2])))
+    return Markup(" ".join(out))
+
+
 def diff_rows(before: str, after: str, context: int = 2) -> list[dict]:
     """What changed, as the changed lines with a little context either side.
 
@@ -161,12 +182,12 @@ def diff_rows(before: str, after: str, context: int = 2) -> list[dict]:
 
 
 class Renderer:
-    """Renders one walkthrough, collecting what its page needs as it goes.
+    """Renders one codewalk, collecting what its page needs as it goes.
 
     Parameters
     ----------
     walk : Walk
-        The walkthrough, parsed.
+        The codewalk, parsed.
     spec_mode : bool
         Whether it's a spec, whose requirements are rendered as anchors with their code.
     """
@@ -176,6 +197,8 @@ class Renderer:
         # A spec file: `r[id]` paragraphs are requirements, shown as such
         self.spec_mode = spec_mode
         self.ctx = walk.ctx
+        # A PRD: what it proposes for the spec, by the line each is written on
+        self.prd: dict[int, SpecChange] = {c.line: c for c in spec_changes(walk)} if walk.meta.kind == "prd" else {}
         self.symbols: dict[str, dict] = {}
         self.requirements: dict[str, dict] = {}
         # Terms and facts it mentions or cites, by `t:id` or `f:id`
@@ -183,8 +206,8 @@ class Renderer:
         self.by_line = {(r.line, r.key if r.kind == "embed" else r.target): r for r in walk.refs}
 
     @cached_property
-    def walkthroughs(self) -> set[str]:
-        return set(self.ctx.walkthroughs())
+    def codewalks(self) -> set[str]:
+        return set(self.ctx.codewalks())
 
     @cached_property
     def specs(self) -> set[str]:
@@ -230,6 +253,7 @@ class Renderer:
             ref=ref, req=req, text=requirement_html(req.text), traces=traces, slug=_slug(req.id)
         )
 
+    # r[impl proposal.change]
     def proposal(self, ref: Ref, end: int) -> str:
         """A `walk proposed` block: the draft, or once the name exists, what was written.
 
@@ -256,7 +280,10 @@ class Renderer:
             raw = files.lines(s.file)[s.start - 1 : s.end]
             indent = min((len(l) - len(l.lstrip()) for l in raw if l.strip()), default=0)
             rows = [(n, Markup(_dedent_html(highlighted[n - 1], indent) or " ")) for n in range(s.start, s.end + 1)]
-            diff = diff_rows(ref.draft or "", "\n".join(l[indent:] for l in raw), context=3)
+            current = "\n".join(l[indent:] for l in raw)
+            # A change shows what there is, then what there will be; a written proposal what
+            # was planned, then what was written
+            diff = diff_rows(current, ref.draft or "", context=3) if ref.change else diff_rows(ref.draft or "", current, context=3)
         # Taken: the name is already several symbols' (not just close to some)
         ambiguous = len(ref.candidates) > 1 and all(c.name == ref.target.split("::")[-1] for c in ref.candidates)
         return templates.get_template("proposal.html").render(
@@ -268,6 +295,7 @@ class Renderer:
             diff=diff,
             end=end,
             ambiguous=ambiguous,
+            agreed=None if ref.symbol else self.walk.agreement(ref),
             candidates=[self.ctx.index.shortest_unique(c) for c in ref.candidates] if ambiguous else [],
             zed=self.symbols[ref.target]["zed"] if ref.symbol else None,
             slug=_slug(ref.target),
@@ -308,7 +336,7 @@ class Renderer:
         return key
 
     def definition_href(self, d: Definition) -> str:
-        view = "spec" if d.file in self.specs else "walk" if d.file in self.walkthroughs else "glossary"
+        view = "spec" if d.file in self.specs else "walk" if d.file in self.codewalks else "glossary"
         anchor = f"{d.kind[0]}-{_slug(d.id)}"
         return f"/glossary#{anchor}" if view == "glossary" else f"/{view}/{d.file}#{anchor}"
 
@@ -342,17 +370,49 @@ class Renderer:
         body = re.sub(r"^[tf]\[[^\]]+\][^\n<]*\s*", "", body)
         if d:
             self.note_definition(d)
+        change = self.prd.get(env["line"])
         return templates.get_template("definition_def.html").render(
-            kind="term" if kind == "t" else "fact", id=did, d=d, slug=_slug(did), line=env["line"], body=Markup(body)
+            kind="term" if kind == "t" else "fact", id=did, d=d, slug=_slug(did), line=env["line"], body=Markup(body), change=change
         )
 
-    # r[impl term.cite]
+    # r[impl prd.compare]
+    # r[impl prd.terms]
+    def proposed_requirement(self, c: SpecChange, para, inline, env) -> str:
+        """A requirement a PRD proposes, against the spec: new, changed, removed, quoted, or in error.
+
+        Parameters
+        ----------
+        c : SpecChange
+            How it stands against the spec.
+        para : Token
+            Its paragraph_open token.
+        inline : Token
+            Its inline token, with the marker and the text.
+        env : dict
+            markdown-it's render environment.
+
+        Returns
+        -------
+        str
+            The HTML.
+        """
+        env["line"] = para.map[0] + 1 if para.map else env["line"]
+        md = self.walk.md
+        body = md.renderer.renderInline(inline.children or [], md.options, env)
+        body = re.sub(r"^[a-z][a-z0-9]*\[[^\]]+\][^\n<]*\s*", "", body)
+        return templates.get_template("prd_requirement.html").render(
+            c=c, slug=_slug(c.id), line=env["line"], body=Markup(body), words=word_diff(c.was or "", c.text)
+        )
+
+    # r[impl term.cite+2]
     def text(self, tokens, idx, options, env) -> str:
         """Plain text, with the first mention of each term in a paragraph linked to it."""
         content = html.escape(tokens[idx].content)
         pattern = self.ctx.glossary.mentions()
         if not pattern or env.get("in_heading") or env.get("in_link"):
             return content
+        mark = NOTE_MARK.match(content)
+        head, content = (content[: mark.end()], content[mark.end() :]) if mark else ("", content)
         seen = env.setdefault("seen_terms", set())
 
         def link(m):
@@ -363,7 +423,7 @@ class Renderer:
             key = self.note_definition(d)
             return f'<a class="mention" href="{self.definition_href(d)}" data-term="{key}">{m.group(0)}</a>'
 
-        return pattern.sub(link, content)
+        return head + pattern.sub(link, content)
 
     # ---- Threads --------------------------------------------------------------------------
 
@@ -398,6 +458,7 @@ class Renderer:
         mark(out)
         return out
 
+    # r[impl note.add-settled]
     def thread(self, open_idx: int, close_idx: int, thread, env) -> str:
         """A thread of notes, each note's Markdown rendered as the page renders it.
 
@@ -416,7 +477,7 @@ class Renderer:
             The HTML.
         """
         notes = self.notes_html(open_idx, close_idx, env)
-        return templates.get_template("thread.html").render(t=thread, notes=notes)
+        return templates.get_template("thread.html").render(t=thread, notes=notes, prd=self.walk.meta.kind == "prd")
 
     # ---- Embedded symbols ----------------------------------------------------------------
 
@@ -445,7 +506,7 @@ class Renderer:
         raw = [files.lines(s.file)[n - 1] for n in shown]
         last = shown[-1]
         for line in raw:
-            self.note_requirements([tracey.key(p, rid) for p, _, rid in REQ_IN_CODE.findall(line)])
+            self.note_requirements([tracey.key(p, rid) for p, _, rid, _ in REQ_IN_CODE.findall(line)])
         # Shown without the indent it has inside its impl, class or module
         indent = min((len(l) - len(l.lstrip()) for l in raw if l.strip()), default=0)
         # A gap between runs is a row of its own, with no line number
@@ -543,9 +604,9 @@ class Renderer:
             target = {"walk": rest, "req": "r:" + rest, "term": "t:" + rest, "fact": "f:" + rest}[scheme]
             return self.inline_ref(target, label, env["line"])
         if href.split("#")[0].endswith(".md") and not re.match(r"^[a-z]+:", href):
-            # A link to another walkthrough opens it here
+            # A link to another codewalk opens it here
             target = os.path.normpath(os.path.join(os.path.dirname(self.walk.rel), href.split("#")[0]))
-            if target in self.walkthroughs:
+            if target in self.codewalks:
                 tok.attrSet("href", f"/walk/{target}")
                 tok.attrSet("class", "walklink")
             elif target in self.specs:
@@ -598,11 +659,29 @@ class Renderer:
                 self.spec_mode
                 and tok.type == "paragraph_open"
                 and k + 1 < len(tokens)
-                and (m := re.match(rf"^([a-z][a-z0-9]*)\[({tracey.ID})\]", tokens[k + 1].content))
+                and (m := re.match(rf"^([a-z][a-z0-9]*)\[({tracey.ID}){tracey.VERSION}\]", tokens[k + 1].content))
                 and m.group(1) in self.ctx.spec.prefixes
             ):
                 # A requirement: rendered by `requirement_def` from its inline token
                 parts[-1] += self.requirement_def(tracey.key(m.group(1), m.group(2)), tok, tokens[k + 1], env)
+                tokens[k + 1].type = "_done"
+                skip_close = True
+                continue
+            if tok.type == "paragraph_open" and k + 1 < len(tokens) and COMMENT.match(tokens[k + 1].content):
+                # A comment, as the PRD template's guidance is: for whoever edits it, not shown
+                tokens[k + 1].type = "_done"
+                skip_close = True
+                continue
+            if (
+                self.prd
+                and tok.type == "paragraph_open"
+                and tok.map
+                and (c := self.prd.get(tok.map[0] + 1))
+                and c.kind == "requirement"
+                and k + 1 < len(tokens)
+            ):
+                # A requirement a PRD proposes: shown against the spec
+                parts[-1] += self.proposed_requirement(c, tok, tokens[k + 1], env)
                 tokens[k + 1].type = "_done"
                 skip_close = True
                 continue
@@ -670,7 +749,7 @@ class Renderer:
 
 
 def render(walk: Walk, spec_mode: bool = False) -> tuple[str, dict]:
-    """The walkthrough as HTML, and the data its page needs.
+    """The codewalk as HTML, and the data its page needs.
 
     The data is each symbol and requirement it refers to, for hover cards and the context
     panel.
@@ -678,7 +757,7 @@ def render(walk: Walk, spec_mode: bool = False) -> tuple[str, dict]:
     Parameters
     ----------
     walk : Walk
-        The walkthrough, parsed.
+        The codewalk, parsed.
     spec_mode : bool
         It's a spec file: `r[id]` paragraphs are requirements, shown as such.
 

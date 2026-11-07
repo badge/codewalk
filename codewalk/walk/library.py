@@ -1,9 +1,9 @@
-"""All the walkthroughs together, as the index page shows them.
+"""All the codewalks together, as the index page shows them.
 
 That's what each says about itself, how they relate, and how far each has been reviewed.
 
-Walkthroughs relate by linking to each other, in their text or in their front matter's
-`related`. A link is one way, but either end shows it: a walkthrough lists what it links
+Codewalks relate by linking to each other, in their text or in their front matter's
+`related`. A link is one way, but either end shows it: a codewalk lists what it links
 to and what links to it.
 """
 
@@ -15,11 +15,11 @@ from pathlib import PurePosixPath
 from pydantic import BaseModel
 
 from codewalk.spec import prose
-from codewalk.walk.doc import Context, Walk
+from codewalk.walk.doc import Context, Stage, Walk
 
 
 class Summary(BaseModel):
-    """One walkthrough, as the index shows it."""
+    """One codewalk, as the index shows it."""
 
     rel: str
     # From its front matter: where it goes in its folder
@@ -27,9 +27,9 @@ class Summary(BaseModel):
     title: str
     summary: str | None
     tags: list[str]
-    # Its folder, which is how the index groups walkthroughs
+    # Its folder, which is how the index groups codewalks
     folder: str
-    # Other walkthroughs it links to, and that link to it, as paths from the root
+    # Other codewalks it links to, and that link to it, as paths from the root
     links_to: list[str]
     linked_from: list[str] = []
     references: int
@@ -39,11 +39,14 @@ class Summary(BaseModel):
     changed: int
     # "prd", say, from its front matter
     kind: str | None = None
+    # For a PRD, its stage, from its front matter
+    stage: Stage | None = None
     # Its proposals: not written yet, written, settled
     proposed: int = 0
     written: int = 0
     settled: int = 0
 
+    # r[impl proposal.progress+2]
     @property
     def plan(self) -> int:
         return self.proposed + self.written + self.settled
@@ -76,17 +79,17 @@ class SpecSummary(BaseModel):
 
 # r[impl ui.weight]
 def by_weight(s: Summary | SpecSummary) -> tuple:
-    """Where a walkthrough or spec goes in its folder: lighter first, then the rest, by title."""
+    """Where a codewalk or spec goes in its folder: lighter first, then the rest, by title."""
     return (s.weight is None, s.weight or 0, s.title.lower())
 
 
 class Library(BaseModel):
-    walkthroughs: list[Summary]
+    codewalks: list[Summary]
     specs: list[SpecSummary] = []
 
     @classmethod
     def of(cls, ctx: Context) -> Library:
-        rels = ctx.walkthroughs()
+        rels = ctx.codewalks()
         known = set(rels)
         out: dict[str, Summary] = {}
         for rel in rels:
@@ -107,6 +110,7 @@ class Library(BaseModel):
                 broken=sum(1 for p in problems if p.severity == "error"),
                 changed=sum(1 for p in problems if p.severity == "warning"),
                 kind=w.meta.kind,
+                stage=(w.meta.stage or "problem") if w.meta.kind == "prd" else None,
                 **w.progress().model_dump(),
             )
         for s in out.values():
@@ -128,37 +132,37 @@ class Library(BaseModel):
                     drifted=len(v.drifted),
                 )
             )
-        return cls(walkthroughs=list(out.values()), specs=specs)
+        return cls(codewalks=list(out.values()), specs=specs)
 
     def get(self, rel: str) -> Summary | None:
-        return next((s for s in self.walkthroughs if s.rel == rel), None)
+        return next((s for s in self.codewalks if s.rel == rel), None)
 
     def titles(self) -> dict[str, str]:
-        return {s.rel: s.title for s in self.walkthroughs}
+        return {s.rel: s.title for s in self.codewalks}
 
     def tags(self) -> list[tuple[str, int]]:
-        """Every tag, with how many walkthroughs have it, most used first.
+        """Every tag, with how many codewalks have it, most used first.
 
         Returns
         -------
         list of tuple of (str, int)
             Each tag and its count; ties in order of tag.
         """
-        counts = Counter(t for s in self.walkthroughs for t in s.tags)
+        counts = Counter(t for s in self.codewalks for t in s.tags)
         return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
 
     def folders(self) -> list[tuple[str, list[Summary]]]:
-        """The walkthroughs grouped by folder, folders in order, each in order of weight.
+        """The codewalks grouped by folder, folders in order, each in order of weight.
 
         Lighter first; those without a weight after, by title.
 
         Returns
         -------
         list of tuple of (str, list of Summary)
-            Each folder and its walkthroughs.
+            Each folder and its codewalks.
         """
         groups: dict[str, list[Summary]] = {}
-        for s in self.walkthroughs:
+        for s in self.codewalks:
             groups.setdefault(s.folder, []).append(s)
         return [(f, sorted(g, key=by_weight)) for f, g in sorted(groups.items())]
 

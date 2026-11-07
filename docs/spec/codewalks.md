@@ -2,9 +2,9 @@
 weight: 10
 ---
 
-## Walkthroughs
+## Codewalks
 
-A walkthrough is an ordinary Markdown file under the docs folders that makes at least one
+A codewalk is an ordinary Markdown file under the docs folders that makes at least one
 reference to the code (`walk.what`). It reads as Markdown anywhere: on GitLab, in an
 editor, in a diff. codewalk adds to it, and never needs it to be anything else.
 
@@ -35,7 +35,7 @@ link: hover for its signature and docs, click for its file (`embed.inline`).
 
 ### Checking it
 
-`codewalk check` resolves every reference in every walkthrough, and says what's broken,
+`codewalk check` resolves every reference in every codewalk, and says what's broken,
 by file and line, and fails if anything is (`check.broken`). A link to a Markdown file
 that isn't there is broken too (`check.links`). Code that's changed since it was reviewed
 isn't broken, so it's a warning, unless asked to be strict (`check.strict`).
@@ -43,20 +43,51 @@ isn't broken, so it's a warning, unless asked to be strict (`check.strict`).
 ### Reviewing it
 
 Reading an excerpt and marking it reviewed records the code as it was, in
-`codewalk.review.json` at the root, by walkthrough and reference (`review.record`). When
+`codewalk.review.json` at the root, by codewalk and reference (`review.record`). When
 the code changes, the excerpt says so, with what changed since (`review.changed`).
 Marking code reviewed is a person's to do (`review.people`).
 
 ### Taking it elsewhere
 
-A walkthrough exports to plain Markdown, with each excerpt written out as it stands and
+A codewalk exports to plain Markdown, with each excerpt written out as it stands and
 linked to its file, for anywhere codewalk isn't (`export.plain`).
+
+## Terms
+
+t[reference]
+A name for code in a codewalk: inline, as `[[Name]]` or a `walk:` link, or on a line
+of its own in a `walk` block. It resolves to one symbol, or it's broken.
+
+t[qualified-name]
+A symbol's full name: the path to it and then its own name, with `::` between, as
+`codewalk::walk::doc::Walk::problems`. A Python module's dotted path is written the same
+way.
+
+t[excerpt]
+The code a line of a `walk` block shows: a symbol as it stands in its file, all of it,
+part of it (`> text`), or its outline (`sig`).
+
+t[broken]
+A reference that names no symbol, or more than one, or a link to a Markdown file that
+isn't there. `codewalk check` fails on one. A proposal's name, not written yet, is in
+hand instead.
+
+t[review]
+A person's record of having read an excerpt: the digest and text of its code as it was,
+in `codewalk.review.json`. Once the code's digest differs, the excerpt has changed since
+its review.
+
+## Facts
+
+f[markdown-it.token-types] observed
+markdown-it-py's token types (`fence`, `paragraph_open`) are plain strings it makes up as
+it parses, with no enum of its own. Observed in markdown-it-py 3, November 2026.
 
 ## Requirements
 
 r[walk.what]
 A Markdown file matched by the `docs` globs in `codewalk.toml` MUST be treated as a
-walkthrough if it contains a `walk` block or a `[[…]]` reference, and isn't a spec file.
+codewalk if it contains a `walk` block or a `[[…]]` reference, and isn't a spec file.
 
 r[ref.tail]
 A name MUST resolve to the one symbol whose qualified name ends with it, segment by
@@ -113,7 +144,7 @@ r[check.broken]
 candidates, and MUST exit non-zero if there is one.
 
 r[check.links]
-A relative link in a walkthrough to a Markdown file that doesn't exist MUST be reported
+A relative link in a codewalk to a Markdown file that doesn't exist MUST be reported
 as an error.
 
 r[check.strict]
@@ -122,7 +153,7 @@ Code changed since it was reviewed MUST be reported as a warning, and `codewalk 
 
 r[review.record]
 Marking a reference reviewed MUST record a digest and the text of its code, under the
-walkthrough and the reference as written, in `codewalk.review.json` at the root.
+codewalk and the reference as written, in `codewalk.review.json` at the root.
 
 r[review.changed]
 A reference whose code's digest differs from the one recorded MUST be shown as changed,
@@ -133,6 +164,6 @@ codewalk MUST NOT mark code reviewed except at a person's request, from the brow
 `codewalk review`.
 
 r[export.plain]
-`codewalk export` MUST write the walkthrough as plain Markdown, with each `walk` block
+`codewalk export` MUST write the codewalk as plain Markdown, with each `walk` block
 replaced by the code it shows, in a fenced block in its language, linked to its file and
 line.

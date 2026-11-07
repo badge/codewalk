@@ -1,20 +1,22 @@
 ---
 name: codewalk-propose
-description: Propose a change as a codewalk walkthrough, before writing it - the existing code named, the new code drafted, questions asked in place
+description: Propose a change as a codewalk, before writing it - the existing code named, the new code drafted, questions asked in place
 disable-model-invocation: false
 ---
 
-Propose the change the user describes as a walkthrough, before writing any of it. The
-walkthrough is where the person and you work it out: they read it in codewalk, with every
+Propose the change the user describes as a codewalk, before writing any of it. The
+codewalk is where the person and you work it out: they read it in codewalk, with every
 piece of code shown in place, and answer your questions in it.
 
-1. **Read what's in hand** with `{codewalk} context`, and the walkthroughs and specs the
-   change touches. If a walkthrough already covers this area, extend it rather than
+1. **Read what's in hand** with `{codewalk} context`, and the codewalks and specs the
+   change touches. If a codewalk already covers this area, extend it rather than
    starting another.
 2. **Find the code** the change touches with `{codewalk} find QUERY`, and read it.
-3. **Write the walkthrough** at `{walkthroughs}/<slug>.md` (for a PRD, start it with
-   `{codewalk} new PATH --title T --prd`, wherever the project keeps PRDs), with front
-   matter (a `summary`, `tags`, and `related` for walkthroughs it builds on):
+3. **Write the codewalk** at `{codewalks}/<slug>.md` (for a PRD, start it with
+   `{codewalk} new PATH --title T --prd`, wherever the project keeps PRDs, and write
+   only what its `stage` allows: no requirements before the spec stage, no proposals
+   before the code stage), with front
+   matter (a `summary`, `tags`, and `related` for codewalks it builds on):
    - What the change is for, in a paragraph a person can agree or disagree with.
    - How the code works now, each part named in a `walk` block (`> text` to show only
      part of a symbol), with what matters about it said in prose.
@@ -30,5 +32,5 @@ piece of code shown in place, and answer your questions in it.
    about. Ask few, specific questions, each one you need answered to go on.
 5. **Check** with `{codewalk} check`: every reference resolves, and the proposals and
    questions show as in hand.
-6. **Stop**, and tell the person the walkthrough is ready to read in codewalk
+6. **Stop**, and tell the person the codewalk is ready to read in codewalk
    (`{codewalk} serve`), with the questions you asked. Don't write the code yet.

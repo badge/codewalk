@@ -1,4 +1,4 @@
-"""A walkthrough: a Markdown file whose references to the code are checked against it.
+"""A codewalk: a Markdown file whose references to the code are checked against it.
 
 Three kinds of reference, each written so the file still reads as plain Markdown:
 
@@ -32,8 +32,8 @@ Three kinds of reference, each written so the file still reads as plain Markdown
 
 Notes (questions, answers, decisions) are blockquotes; see `notes.py`.
 
-A walkthrough may open with YAML front matter (see `FrontMatter`), and its ordinary links
-to other walkthroughs are how walkthroughs relate to each other.
+A codewalk may open with YAML front matter (see `FrontMatter`), and its ordinary links
+to other codewalks are how codewalks relate to each other.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 import yaml
 from markdown_it import MarkdownIt
@@ -52,16 +52,22 @@ from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from codewalk.code.index import CodeIndex, Symbol, narrow
 from codewalk.config import Config
+from codewalk.spec import terms
 from codewalk.spec.requirements import Requirement, SpecIndex
 from codewalk.spec.terms import Definition, Glossary
-from codewalk.walk.notes import Thread, threads
+from codewalk.walk.notes import Note, Thread, threads
 from codewalk.walk.review import ReviewState
 
 WIKI = re.compile(r"\[\[([^\[\]|]+?)(?:\|([^\[\]]+?))?\]\]")
 
 
+# The stages a PRD goes through, in order
+Stage = Literal["problem", "prose", "spec", "code", "work"]
+STAGES: tuple[str, ...] = get_args(Stage)
+
+
 class FrontMatter(BaseModel):
-    """What a walkthrough says about itself, in YAML at its top.
+    """What a codewalk says about itself, in YAML at its top.
 
     All optional; anything else there is left alone, since other tools keep their own keys
     in front matter.
@@ -71,14 +77,16 @@ class FrontMatter(BaseModel):
 
     # Shown in place of the first heading
     title: str | None = None
-    # A sentence or two, for the list of walkthroughs
+    # A sentence or two, for the list of codewalks
     summary: str | None = None
     tags: list[str] = []
-    # Other walkthroughs to read with this one, as paths from this file. Linking to one
+    # Other codewalks to read with this one, as paths from this file. Linking to one
     # in the text relates them too
     related: list[str] = []
-    # What kind of walkthrough: "prd" for one that proposes a change to be made
+    # What kind of codewalk: "prd" for one that proposes a change to be made
     kind: str | None = None
+    # For a PRD: where it is in its lifecycle; at the problem if it isn't given
+    stage: Stage | None = None
     # Where it goes among the others in its folder: lighter first, then those without one,
     # by title
     weight: int | None = None
@@ -90,7 +98,7 @@ class FrontMatter(BaseModel):
 
 
 class Ref(BaseModel):
-    """One reference a walkthrough makes, and what it resolved to."""
+    """One reference a codewalk makes, and what it resolved to."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -99,7 +107,7 @@ class Ref(BaseModel):
     # "embed" is a line of a `walk` block (a symbol, or with `r:`, a requirement);
     # "proposal" a `walk proposed` block
     kind: Literal["embed", "inline", "req", "proposal", "term"]
-    # 1-based line in the walkthrough
+    # 1-based line in the codewalk
     line: int
     label: str | None = None
     sig: bool = False
@@ -113,6 +121,8 @@ class Ref(BaseModel):
     # Proposed: a name that may not exist yet. A proposal's draft code, and its language;
     # for a settled excerpt (`walk settled`), the draft it was written from
     proposed: bool = False
+    # A `walk proposed change`: a change to code that exists, proposed until it's settled
+    change: bool = False
     settled: bool = False
     draft: str | None = None
     lang: str | None = None
@@ -128,7 +138,7 @@ class Ref(BaseModel):
 
 
 class Progress(BaseModel):
-    """A walkthrough's proposals: not written yet, written and waiting to be settled, and settled.
+    """A codewalk's proposals: not written yet, written and waiting to be settled, and settled.
 
     A PRD starts all proposed and ends all settled.
     """
@@ -210,15 +220,18 @@ def markdown() -> MarkdownIt:
 
 
 # r[impl walk.what]
-def might_be_walkthrough(text: str) -> bool:
-    return "```walk" in text or "[[" in text or any(f"]({s}:" in text for s in ("walk", "req", "term", "fact"))
+# r[impl prd.check]
+def might_be_codewalk(text: str) -> bool:
+    """Whether a file makes a reference, or is a PRD, which is checked whether it does or not."""
+    refers = "```walk" in text or "[[" in text or any(f"]({s}:" in text for s in ("walk", "req", "term", "fact"))
+    return refers or terms.is_prd(text)
 
 
 class Context:
-    """What a walkthrough is checked and shown against.
+    """What a codewalk is checked and shown against.
 
     The project's code, spec and glossary, each indexed, and the review state. There's one
-    for a project, shared by every walkthrough in it.
+    for a project, shared by every codewalk in it.
 
     Parameters
     ----------
@@ -256,10 +269,10 @@ class Context:
         return sorted({str(p.relative_to(self.root)) for g in self.spec.globs for p in self.root.glob(g) if p.is_file()})
 
     # r[impl walk.what]
-    def walkthroughs(self) -> list[str]:
+    def codewalks(self) -> list[str]:
         """Markdown files under the docs globs that make at least one reference.
 
-        Spec files aren't walkthroughs, even when their prose cites requirements: they have
+        Spec files aren't codewalks, even when their prose cites requirements: they have
         a view of their own.
 
         Returns
@@ -268,14 +281,14 @@ class Context:
             Paths from the root, in order.
         """
         specs = set(self.spec_paths())
-        return [rel for rel in self.doc_paths() if rel not in specs and might_be_walkthrough((self.root / rel).read_text())]
+        return [rel for rel in self.doc_paths() if rel not in specs and might_be_codewalk((self.root / rel).read_text())]
 
     def editable(self) -> set[str]:
         return set(self.doc_paths()) | {p for p in self.spec_paths() if p.endswith(".md")}
 
 
 class Walk:
-    """One walkthrough, parsed, with every reference resolved.
+    """One codewalk, parsed, with every reference resolved.
 
     Parameters
     ----------
@@ -307,7 +320,7 @@ class Walk:
     def _resolve(self, ref: Ref) -> Ref:
         if ref.target.startswith(("t:", "f:")):
             ref.kind = "term"
-            ref.definition = self.ctx.glossary.get(ref.target)
+            ref.definition = self.ctx.glossary.get(ref.target) or self.own_definition(ref.target)
             return ref
         if ref.target.startswith("r:"):
             if ref.kind == "inline":
@@ -334,7 +347,7 @@ class Walk:
             self.links.append(target)
 
     # r[impl ref.forms]
-    # r[impl term.cite]
+    # r[impl term.cite+2]
     def _collect(self) -> None:
         for tok in self.tokens:
             if tok.type == "front_matter":
@@ -372,20 +385,24 @@ class Walk:
         for rel in self.meta.related:
             self._link(rel)
 
-    # r[impl proposal.draft]
+    # r[impl proposal.draft+2]
+    # r[impl proposal.change]
     def _proposal(self, tok) -> Ref:
-        """A `walk proposed` block: the name on its first line, the draft after it."""
+        """A `walk proposed` block, or `walk proposed change`: the name, then the draft."""
         lines = tok.content.rstrip("\n").split("\n")
         first = next((i for i, l in enumerate(lines) if l.strip()), 0)
         words = tok.info.split()
+        change = len(words) > 2 and words[2] == "change"
+        lang = words[3 if change else 2] if len(words) > (3 if change else 2) else None
         line = (tok.map[0] + 2 + first) if tok.map else 0
         ref = Ref(
             target=lines[first].strip() if lines else "",
             kind="proposal",
             line=line,
             proposed=True,
+            change=change,
             draft="\n".join(lines[first + 1 :]).strip("\n"),
-            lang=words[2] if len(words) > 2 else None,
+            lang=lang,
         )
         return self._resolve(ref)
 
@@ -424,15 +441,50 @@ class Walk:
         )
         return self._resolve(ref)
 
-    # r[impl proposal.progress]
+    def thread_after(self, ref: Ref) -> Thread | None:
+        """The thread directly after the block `ref` is in, if there is one."""
+        return next((t for t in self.threads if t.about_line is not None and t.about_line <= ref.line < t.line), None)
+
+    # r[impl proposal.agree]
+    def agreement(self, ref: Ref) -> Note | None:
+        """The last decision in the thread after a proposal: a person agreeing it, or changing it."""
+        t = self.thread_after(ref)
+        return next((n for n in reversed(t.all()) if n.kind == "decision"), None) if t else None
+
+    # r[impl proposal.progress+2]
+    # r[impl proposal.change]
     def progress(self) -> Progress:
         """How far the code it proposes has got: proposed, written, settled."""
         proposals = [r for r in self.refs if r.kind == "proposal"]
         return Progress(
-            proposed=sum(1 for r in proposals if not r.symbol),
-            written=sum(1 for r in proposals if r.symbol),
+            proposed=sum(1 for r in proposals if not r.symbol or r.change),
+            written=sum(1 for r in proposals if r.symbol and not r.change),
             settled=sum(1 for r in self.refs if r.settled),
         )
+
+    def own_definition(self, ref: str) -> Definition | None:
+        """In a PRD, a term or fact it defines itself, as `t:id` or `f:id`; else None."""
+        if self.meta.kind != "prd":
+            return None
+        kind, _, did = ref.partition(":")
+        return next((d for d in terms.parse(self.rel, self.text) if d.kind[0] == kind and d.id == did), None)
+
+    # r[impl prd.check]
+    # r[impl prd.stage-gate]
+    def prd_problems(self) -> list[Problem]:
+        """A PRD's spec checked against the spec, and anything written ahead of its stage."""
+        if self.meta.kind != "prd":
+            return []
+        from codewalk.walk.prd import spec_changes
+
+        changes = spec_changes(self)
+        out = [Problem(severity="error", line=c.line, message=c.error or "") for c in changes if c.how == "error"]
+        stage = self.meta.stage or "problem"
+        at = STAGES.index(stage)
+        ahead = [(c.line, "requirement") for c in changes if c.kind == "requirement" and at < STAGES.index("spec")]
+        ahead += [(r.line, "proposal") for r in self.refs if r.kind == "proposal" and at < STAGES.index("code")]
+        out += [Problem(severity="warning", line=line, message=f"a {what} at the {stage} stage") for line, what in ahead]
+        return out
 
     def _front_matter(self, content: str) -> None:
         try:
@@ -494,7 +546,8 @@ class Walk:
     # r[impl check.links]
     # r[impl check.strict]
     # r[impl proposal.pending]
-    # r[impl term.errors]
+    # r[impl term.errors+2]
+    # r[impl proposal.draft+2]
     def problems(self) -> list[Problem]:
         out = []
         if self.meta_error:
@@ -517,7 +570,15 @@ class Walk:
             if ref.error:
                 out.append(Problem(severity="error", line=ref.line, message=ref.error, ref=ref.key))
                 continue
-            if ref.proposed:
+            if ref.kind == "proposal" and self.meta.kind != "prd":
+                message = f"`{ref.target}` is proposed in a codewalk that isn't a PRD: propose it in one"
+                out.append(Problem(severity="warning", line=ref.line, message=message, ref=ref.target))
+            if ref.change:
+                if ref.symbol:
+                    message = f"a change to `{ref.target}` is proposed, not settled yet"
+                    out.append(Problem(severity="pending", line=ref.line, message=message, ref=ref.target))
+                    continue
+            elif ref.proposed:
                 if ref.symbol:
                     what = "proposal" if ref.kind == "proposal" else "`?`"
                     out.append(
@@ -569,13 +630,13 @@ class Walk:
             if not (self.ctx.root / link).exists():
                 line = next((i + 1 for i, l in enumerate(self.text.split("\n")) if os.path.basename(link) in l), 1)
                 out.append(Problem(severity="error", line=line, message=f"links to `{link}`, which doesn't exist"))
-        return out
+        return out + self.prd_problems()
 
     # ---- Exporting to plain Markdown -------------------------------------------------------
 
     # r[impl export.plain]
     def export(self, out_rel: str) -> str:
-        """The walkthrough as plain Markdown, for anywhere that won't run this.
+        """The codewalk as plain Markdown, for anywhere that won't run this.
 
         Each embedded symbol becomes a link to it and its code, and each inline one a link.
 
@@ -669,9 +730,39 @@ class Walk:
         return header + "\n".join(out_lines)
 
 
+# r[impl prd.stage-set]
+def set_front_matter(text: str, key: str, value: str) -> str:
+    """`text` with `key: value` in its front matter, replacing the key if it's there.
+
+    Parameters
+    ----------
+    text : str
+        The codewalk's Markdown.
+    key : str
+        The front matter's key.
+    value : str
+        Its value, written as it is.
+
+    Returns
+    -------
+    str
+        The Markdown, with front matter added if it had none.
+    """
+    lines = text.split("\n")
+    if lines and lines[0] == "---" and "---" in lines[1:]:
+        end = lines.index("---", 1)
+        for i in range(1, end):
+            if re.match(rf"{re.escape(key)}\s*:", lines[i]):
+                lines[i] = f"{key}: {value}"
+                return "\n".join(lines)
+        return "\n".join(lines[:end] + [f"{key}: {value}"] + lines[end:])
+    return "\n".join(["---", f"{key}: {value}", "---", "", *lines])
+
+
 # r[impl proposal.settle]
+# r[impl proposal.change]
 def settle(text: str, line: int, target: str) -> str:
-    """`text` with the `walk proposed` block whose name is on `line` settled.
+    """`text` with the `walk proposed` (or `walk proposed change`) block whose name is on `line` settled.
 
     It becomes a `walk settled` block, which shows `target`'s code as written and keeps the
     draft, so what was planned and what happened can both be seen.
@@ -679,7 +770,7 @@ def settle(text: str, line: int, target: str) -> str:
     Parameters
     ----------
     text : str
-        The walkthrough's Markdown.
+        The codewalk's Markdown.
     line : int
         The line the proposal's name is on, 1-based.
     target : str
@@ -692,7 +783,7 @@ def settle(text: str, line: int, target: str) -> str:
     """
     lines = text.split("\n")
     start = next(i for i in range(line - 1, -1, -1) if lines[i].strip().startswith("```walk proposed"))
-    lines[start] = lines[start].replace("walk proposed", "walk settled", 1)
+    lines[start] = re.sub(r"walk proposed(?: change)?", "walk settled", lines[start], count=1)
     lines[line - 1] = target
     return "\n".join(lines)
 

@@ -15,9 +15,56 @@ class Requirement(BaseModel):
     file: str
     line: int
     text: str
+    # From `r[id+N]`; 1 without a suffix
+    version: int = 1
+    # Only in a PRD: `r[id+N] removed`, a requirement it takes out of the spec
+    removed: bool = False
 
 
-REQ = re.compile(rf"^([a-z][a-z0-9]*)\[({tracey.ID})\]\s*$")
+REQ = re.compile(rf"^([a-z][a-z0-9]*)\[({tracey.ID}){tracey.VERSION}\](?:[ \t]+(removed))?\s*$")
+
+
+# r[impl spec.prefix+2]
+def parse(rel: str, text: str, prefixes: set[str], removals: bool = False) -> list[Requirement]:
+    """The requirements in one file's text, in order, each with its version.
+
+    Parameters
+    ----------
+    rel : str
+        The file, from the root.
+    text : str
+        Its Markdown.
+    prefixes : set of str
+        The prefixes a requirement line can have, from `tracey::prefixes`.
+    removals : bool
+        Whether to read `r[id+N] removed` as a removal: in a PRD, and nowhere else.
+
+    Returns
+    -------
+    list of Requirement
+    """
+    out = []
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        m = REQ.match(line)
+        if not m or m.group(1) not in prefixes or (m.group(4) and not removals):
+            continue
+        body = []
+        for nxt in lines[i + 1 :]:
+            if not nxt.strip() or REQ.match(nxt):
+                break
+            body.append(nxt.strip())
+        out.append(
+            Requirement(
+                id=tracey.key(m.group(1), m.group(2)),
+                file=rel,
+                line=i + 1,
+                text="" if m.group(4) else " ".join(body),
+                version=int(m.group(3) or 1),
+                removed=bool(m.group(4)),
+            )
+        )
+    return out
 
 
 class SpecIndex:
@@ -48,7 +95,7 @@ class SpecIndex:
         self._mtimes: dict[str, float] = {}
         self.refresh()
 
-    # r[impl spec.prefix]
+    # r[impl spec.prefix+2]
     def find(self, rid: str, rel: str | None = None) -> Requirement | None:
         """The requirement `rid` names, as written in `rel`.
 
@@ -74,7 +121,7 @@ class SpecIndex:
         found = [r for k, r in self.requirements.items() if k.split(":")[-1] == rid]
         return found[0] if len(found) == 1 else None
 
-    # r[impl spec.prefix]
+    # r[impl spec.prefix+2]
     def refresh(self) -> bool:
         paths = sorted({p for g in self.globs for p in self.root.glob(g) if p.is_file()})
         mtimes = {str(p.relative_to(self.root)): p.stat().st_mtime for p in paths}
@@ -85,18 +132,8 @@ class SpecIndex:
         self.prefix_of = {}
         for p in paths:
             rel = str(p.relative_to(self.root))
-            lines = p.read_text().split("\n")
-            for i, line in enumerate(lines):
-                m = REQ.match(line)
-                if not m or m.group(1) not in self.prefixes:
-                    continue
-                body = []
-                for nxt in lines[i + 1 :]:
-                    if not nxt.strip() or REQ.match(nxt):
-                        break
-                    body.append(nxt.strip())
-                rid = tracey.key(m.group(1), m.group(2))
-                self.prefix_of.setdefault(rel, m.group(1))
-                reqs[rid] = Requirement(id=rid, file=rel, line=i + 1, text=" ".join(body))
+            for r in parse(rel, p.read_text(), self.prefixes):
+                self.prefix_of.setdefault(rel, r.id.split(":")[0] if ":" in r.id else "r")
+                reqs[r.id] = r
         self.requirements = reqs
         return True

@@ -269,7 +269,7 @@ def describe(ctx: Context, target: str) -> tuple[str, tuple[str, int]] | None:
     sym, _ = ctx.index.resolve(target.split(" > ")[0])
     if not sym:
         return None
-    markers = ", ".join(f"{k} {i}" for k, i in sym.markers)
+    markers = ", ".join(f"{k} {i}" + (f"+{v}" if v > 1 else "") for k, i, v in sym.markers)
     return (
         f"**{sym.kind}** `{sym.qualified}`\n\n```\n{sym.signature}\n```\n\n{sym.doc}\n\n"
         + (f"```text\n{sym.details}\n```\n\n" if sym.details else "")

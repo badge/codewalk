@@ -21,11 +21,11 @@ where you are, with the Markdown and the preview scrolling together.
 
 ## Contents
 
-1. [A walkthrough is Markdown](#1-a-walkthrough-is-markdown)
+1. [A codewalk is Markdown](#1-a-codewalk-is-markdown)
 2. [The index: every symbol, from tree-sitter](#2-the-index-every-symbol-from-tree-sitter)
 3. [Resolving a name](#3-resolving-a-name)
-4. [A walkthrough, parsed and checked](#4-a-walkthrough-parsed-and-checked)
-5. [The library: how walkthroughs relate](#5-the-library-how-walkthroughs-relate)
+4. [A codewalk, parsed and checked](#4-a-codewalk-parsed-and-checked)
+5. [The library: how codewalks relate](#5-the-library-how-codewalks-relate)
 6. [Rendering: code in place](#6-rendering-code-in-place)
 7. [Review: what you've read, and what's changed since](#7-review-what-youve-read-and-whats-changed-since)
 8. [The server, kept local and live](#8-the-server-kept-local-and-live)
@@ -40,9 +40,9 @@ where you are, with the Markdown and the preview scrolling together.
 17. [The browser side](#17-the-browser-side)
 18. [Gaps, and where it could go](#18-gaps-and-where-it-could-go)
 
-## 1. A walkthrough is Markdown
+## 1. A codewalk is Markdown
 
-The whole design rests on one choice: a walkthrough is an ordinary Markdown file, and
+The whole design rests on one choice: a codewalk is an ordinary Markdown file, and
 everything codewalk adds is written so the file still reads well as plain text, in a
 diff, in a merge request or in an editor without codewalk. There are three kinds of
 reference.
@@ -74,7 +74,7 @@ into a place in the code.
 
 ## 2. The index: every symbol, from tree-sitter
 
-A [[Symbol]] is one thing a walkthrough can point at. It records three lines, not two:
+A [[Symbol]] is one thing a codewalk can point at. It records three lines, not two:
 `start` takes in its doc comments, decorators and requirement markers, `line` is where
 the item itself begins, and `end` where it ends. So an excerpt shows a function with its
 docs and markers, but its link goes straight to the definition.
@@ -93,7 +93,7 @@ CodeIndex::refresh
 
 **Rust** is indexed by [[index::index_file]]. Its qualified names come from the module
 path, which is the file's path, as Rust has it. Impl blocks get their own entry, so a
-walkthrough can show `impl Thing` whole, and their methods are filed under the type:
+codewalk can show `impl Thing` whole, and their methods are filed under the type:
 
 ```walk
 index::index_file::walk > elif t == "impl_item":
@@ -111,7 +111,7 @@ _leading
 
 **Python** is indexed by [[python::index_file]], into the same `::` names so a reference
 reads the same whichever language it's in. Functions inside functions are indexed too,
-which is how this walkthrough can show `Renderer::embed` below. A module's name comes
+which is how this codewalk can show `Renderer::embed` below. A module's name comes
 from its package, as Python has it:
 
 ```walk
@@ -130,7 +130,7 @@ CodeIndex::resolve
 ```
 
 The nearest are found by [[CodeIndex::nearest]]: names close to the last part, ranked by
-how closely the whole reference matches the end of each. When this walkthrough's own
+how closely the whole reference matches the end of each. When this codewalk's own
 references went stale in a restructure, that ranking is what turned `Walk::render` into
 a suggestion of `Renderer::render` rather than some Rust `runner`.
 
@@ -140,7 +140,7 @@ CodeIndex::nearest
 
 Going the other way, [[CodeIndex::shortest_unique]] gives the shortest name to write for
 a symbol. A method keeps its type, `Walk::problems` rather than `problems`, because a
-name in a walkthrough is read by people before it's resolved by codewalk.
+name in a codewalk is read by people before it's resolved by codewalk.
 
 ```walk
 CodeIndex::shortest_unique
@@ -155,9 +155,9 @@ review and export, works on it without knowing.
 narrow
 ```
 
-## 4. A walkthrough, parsed and checked
+## 4. A codewalk, parsed and checked
 
-A [[Walk]] is one walkthrough, parsed once with markdown-it. [[Walk::_collect]] walks
+A [[Walk]] is one codewalk, parsed once with markdown-it. [[Walk::_collect]] walks
 the tokens and makes a [[Ref]] for every reference, with the line it's on, and
 [[Walk::_resolve]] resolves each. Along the way it reads the front matter and notes
 every ordinary link to another Markdown file.
@@ -166,22 +166,6 @@ every ordinary link to another Markdown file.
 Walk::_collect
 Walk::_resolve
 ```
-
-> [!question] @matthew: I think the `kind` and `type`s throughout here are coming straight from `markdown_it`, and so we can't turn them into enums?
->
-> Also, I clicked "Ask" on the `_collect` symbol's block, above, but this has appeared below `_resolve`, which is below it. I think that needs resolving.
->
-> [!answer] @claude: Half and half. `tok.type` and `tok.tag` are markdown-it's: strings
-> it makes up as it parses (`fence`, `paragraph_open`, `h2`), with no enum of its own, so
-> wrapping them would mean keeping a copy of its token list in step with it. The `kind`s
-> that are codewalk's own are already closed sets, as `Literal`s, which Pydantic checks
-> and a type checker narrows: `Ref.kind`, `Problem.severity`, `Note.kind`,
-> `Citation.state`. A `StrEnum` would add a name to import and nothing else, so I'd keep
-> them as they are.
->
-> The Ask was a real bug: a question always went after the whole `walk` block. Asking
-> about one reference of several now splits the block under it, so the question sits
-> under what it's about (`notes::ask_about`). This one I've left where it is.
 
 Front matter is YAML, read into [[FrontMatter]]. Everything in it is optional, and keys
 it doesn't know are kept rather than refused, since other tools keep their own keys in
@@ -193,19 +177,19 @@ FrontMatter
 
 [[Walk::problems]] is what `codewalk check` prints and the editor lists. A name that
 doesn't resolve is an error, as is a link to a Markdown file that isn't there. Code that
-has changed since it was reviewed is a warning: nothing's wrong with the walkthrough,
+has changed since it was reviewed is a warning: nothing's wrong with the codewalk,
 but the text around it may no longer be true.
 
 ```walk
 Walk::problems
 ```
 
-## 5. The library: how walkthroughs relate
+## 5. The library: how codewalks relate
 
-Walkthroughs relate by linking to each other: in the text, like this one's link to
+Codewalks relate by linking to each other: in the text, like this one's link to
 [codewalk's data model](data_model.md), or in the front matter's `related`.
-[[Library::of]] gathers every walkthrough into a [[Summary]], then turns each link round,
-so either end shows it: the data model lists this walkthrough under "Linked from"
+[[Library::of]] gathers every codewalk into a [[Summary]], then turns each link round,
+so either end shows it: the data model lists this codewalk under "Linked from"
 without saying anything itself.
 
 ```walk
@@ -221,9 +205,9 @@ card lights up its place on the map, and the other way round.
 
 [[Renderer::render]] renders with markdown-it, but takes over its fences (so a `walk`
 block becomes code), its links (so `walk:` links become symbols, and links to other
-walkthroughs open in codewalk) and the double-bracket token. Alongside the HTML it
+codewalks open in codewalk) and the double-bracket token. Alongside the HTML it
 returns the data the page needs for hover cards: each symbol and requirement the
-walkthrough mentions.
+codewalk mentions.
 
 It also tags every block with `data-md`, the line of the Markdown it starts on. That
 attribute is what lets the editor and the preview scroll together, a click in the
@@ -257,7 +241,7 @@ highlight_lines
 ## 7. Review: what you've read, and what's changed since
 
 Review state is a file in the repository, `codewalk.review.json`, so it's committed and
-travels with the code. [[ReviewState::mark]] records, for a walkthrough and a reference,
+travels with the code. [[ReviewState::mark]] records, for a codewalk and a reference,
 a digest of the code and the code itself:
 
 ```walk
@@ -280,8 +264,8 @@ collapses the rest.
 diff_rows
 ```
 
-Marking happens through [[App::review]], one reference or the whole walkthrough at once.
-Marking the whole walkthrough also forgets references it no longer makes, so the file
+Marking happens through [[App::review]], one reference or the whole codewalk at once.
+Marking the whole codewalk also forgets references it no longer makes, so the file
 doesn't fill with the dead.
 
 ```walk
@@ -291,8 +275,8 @@ App::review
 ## 8. The server, kept local and live
 
 The server is Starlette under uvicorn, bound to 127.0.0.1 in [[server::serve]]. It
-writes two things only: the review file, and a walkthrough you save from the editor, and
-[[App::writable]] refuses any path that isn't a Markdown file under the walkthrough
+writes two things only: the review file, and a codewalk you save from the editor, and
+[[App::writable]] refuses any path that isn't a Markdown file under the codewalk
 folders.
 
 ```walk
@@ -311,14 +295,14 @@ App::watched
 ```
 
 Each batch of changed files becomes a [[server::Change]], by [[App::changed]]: whether
-the code or spec changed, which walkthroughs did, and whether the review file did.
+the code or spec changed, which codewalks did, and whether the review file did.
 
 ```walk
 App::changed
 ```
 
 Each page listens on `/events`, a server-sent event stream, with a ping every 15 s so a
-dropped connection is noticed. A page whose walkthrough or code changed asks for a fresh
+dropped connection is noticed. A page whose codewalk or code changed asks for a fresh
 render and swaps it in, keeping its place; an editor with unsaved changes is left alone.
 
 ```walk
@@ -327,7 +311,7 @@ make_app::events
 
 ## 9. Export: plain Markdown for everywhere else
 
-Not everywhere runs codewalk. [[Walk::export]] writes a walkthrough out as plain Markdown,
+Not everywhere runs codewalk. [[Walk::export]] writes a codewalk out as plain Markdown,
 each embedded symbol as a link to its file and line followed by its code, and each name
 as a link. It uses the same resolved references the page does, so a focused excerpt
 exports as the same part.
@@ -336,7 +320,7 @@ exports as the same part.
 Walk::export
 ```
 
-So `codewalk export docs/walkthrough.md out.md` gives this walkthrough as it would read
+So `codewalk export docs/codewalk.md out.md` gives this codewalk as it would read
 anywhere codewalk isn't, with each excerpt as the code stood when it was exported.
 
 ## 10. Proposals: code not written yet
@@ -365,13 +349,13 @@ Walk::_settled
 
 Inline, `[[?Name]]` marks a name to come in the same way.
 
-**A PRD is a walkthrough with all its code proposed.** `codewalk new --prd` starts one:
+**A PRD is a codewalk with all its code proposed.** `codewalk new --prd` starts one:
 the problem, with the existing code named; the outcome; the spec prose it gives rise
 to, citing the requirements it adds; the code, drafted in `walk proposed` blocks with
 the requirement markers it will carry; the tests, drafted the same way; and questions.
 Implementing it settles each proposal in turn, and [[Walk::progress]] counts them,
 proposed to written to settled, shown on the page and the index. When it's done, the
-PRD has become a walkthrough of what was built, with the plan still there under each
+PRD has become a codewalk of what was built, with the plan still there under each
 excerpt.
 
 ```walk
@@ -380,7 +364,7 @@ Walk::progress
 
 ## 11. Notes: the dialogue, in the file
 
-Questions, answers and decisions are blockquotes in the walkthrough, under what they're
+Questions, answers and decisions are blockquotes in the codewalk, under what they're
 about, so they show in a diff and go wherever the file goes. [[threads]] finds them, and
 a [[notes::Thread]] is open while its last question has no answer or decision after it.
 
@@ -393,7 +377,7 @@ From the browser, **Ask** on any excerpt and **Answer**, **Ask more** or **Decid
 thread write the note into the Markdown, as you, with [[reply]] and its sibling `ask`.
 
 A **request** is a standing ask, not about one excerpt: like the one at the top of this
-walkthrough. It stands until a `[!done]` after it says what was done, and
+codewalk. It stands until a `[!done]` after it says what was done, and
 [[notes::Thread::request_open]] says whether it still stands.
 
 ```walk
@@ -424,7 +408,7 @@ reply
 ## 12. What's in hand, for the next run
 
 `codewalk context` is the agent's half of the dialogue: what a session should pick up.
-[[brief]] gathers, for a walkthrough, its open questions (with the names they're about),
+[[brief]] gathers, for a codewalk, its open questions (with the names they're about),
 its proposals not yet written and those waiting to be settled, code changed since it was
 reviewed, and broken references.
 
@@ -467,20 +451,20 @@ CodeIndex::traces
 
 ### The trail, side by side
 
-A spec's prose gives rise to its requirements, and a walkthrough proposes, then shows,
+A spec's prose gives rise to its requirements, and a codewalk proposes, then shows,
 the code that meets them. The link at each step is already there: the prose cites the
 requirement, and the code, proposed or written, carries its marker. [[trail::links]]
-finds, for each block of a walkthrough, the requirements it proposes, implements,
+finds, for each block of a codewalk, the requirements it proposes, implements,
 verifies or cites.
 
 ```walk
 trail::links
 ```
 
-So a walkthrough's margin shows, level with each block, the requirements it bears on,
+So a codewalk's margin shows, level with each block, the requirements it bears on,
 each with the prose in its spec that gave rise to it: prose, requirement and code read
 across one line. **Requirements** (or `m`) puts the margin away. [[trail::uses]] goes the
-other way, for a spec's margin: each requirement lists the walkthroughs that propose,
+other way, for a spec's margin: each requirement lists the codewalks that propose,
 implement or cite it.
 
 ```walk
@@ -507,8 +491,8 @@ Renderer::text
 Glossary::mentions
 ```
 
-The glossary page lists every term and fact, with where each is used, and a fact that
-nothing cites stands out.
+The glossary page lists every term and fact, grouped by the spec that defines it, with
+where each is used, and a fact that nothing cites stands out.
 
 ## 15. In your editor: the language server
 
@@ -525,8 +509,8 @@ lsp::describe
 ## 16. Setting a project up
 
 [[setup::init]] writes a `codewalk.toml`, a section in `AGENTS.md` saying how
-walkthroughs, specs and the glossary work, and two skills: `codewalk-propose`, to propose
-a change as a walkthrough before writing it, and `codewalk-work`, to carry one forward.
+codewalks, specs and the glossary work, and two skills: `codewalk-propose`, to propose
+a change as a codewalk before writing it, and `codewalk-work`, to carry one forward.
 Running it again replaces its section rather than adding another.
 
 ```walk
@@ -575,45 +559,20 @@ Gaps:
 
 Where it could go:
 
-- **`codewalk check` in CI,** so a walkthrough can't fall behind the code unnoticed, and
+- **`codewalk check` in CI,** so a codewalk can't fall behind the code unnoticed, and
   `--strict` before a release.
 - **Notes on an excerpt** from the browser, written back into the Markdown under the
   block, so a review can leave questions where they apply.
 
-### Proposed: from the code back to walkthroughs
+### From the code back to codewalks
 
-The context panel shows a symbol in its file, but not which walkthroughs show it. The
-library could say, so the panel (and the language server's hover, in the code itself)
-can list them:
+The context panel shows a symbol in its file, but not which codewalks show it. Saying so
+is proposed in [its own PRD](prd/from-the-code-back-to-codewalks.md).
 
-```walk proposed python
-Library::uses
-def uses(self, ctx: Context, sym: Symbol) -> list[tuple[str, int]]:
-    """The walkthroughs that show or mention `sym`, with the line of each reference."""
-    out = []
-    for s in self.walkthroughs:
-        for ref in Walk(ctx, s.rel).refs:
-            if ref.symbol and ref.symbol.file == sym.file and ref.symbol.start <= sym.line <= ref.symbol.end:
-                out.append((s.rel, ref.line))
-    return out
-```
+## Changelog
 
-> [!question] @claude: Parsing every walkthrough on each call is fine for two, but not
-> for fifty. Should the library keep an index from symbol to references, rebuilt when a
-> walkthrough changes, or is that premature until there are more walkthroughs?
->
-> [!question] @matthew: That makes sense. I think it's reasonable to assume:
-> - One codewalk instance per project
-> - Each project is a git repo
->
-> As a result, I would probably create a `.codewalk/` dir in the repo root (add it to `.gitignore` or not? I'm not sure), and store a little sqlite DB in there to track this kind of stuff).
->
-> [!answer] @claude: Agreed on both assumptions, and on `.codewalk/` with SQLite (the
-> standard library's, so nothing new to install). I'd ignore it in git: everything in it
-> is worked out from files that are committed, so it can always be rebuilt, and a binary
-> file that changes on every read would conflict in every branch. Review state is
-> different, since it's a record of what people did and can't be rebuilt, so
-> `codewalk.review.json` stays where it is, committed. `codewalk init` would add
-> `.codewalk/` to `.gitignore`. In the DB: one row for each reference (walkthrough, line,
-> symbol's file and span, requirement), rewritten for a walkthrough when its mtime moves,
-> which is what `uses` reads.
+What was asked here and how it was settled, newest first.
+
+- 2026-11-07: The proposal for `Library::uses` moved to [a PRD of its own](prd/from-the-code-back-to-codewalks.md), since a codewalk explains code and a PRD proposes it.
+- 2026-11-07 (`Library::uses`): **question** @claude: Parsing every codewalk on each call is fine for two, but not for fifty. → **answer** @claude: Agreed on both assumptions, and on `.codewalk/` with SQLite (the standard library's, so nothing new to install). (1 more note)
+- 2026-11-07 (`Walk::_collect`, `Walk::_resolve`): **question** @matthew: I think the `kind` and `type`s throughout here are coming straight from `markdown_it`, and so we can't turn them into enums? → **answer** @claude: Half and half.

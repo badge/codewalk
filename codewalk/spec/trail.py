@@ -1,17 +1,17 @@
 """The trail from prose to spec to code, so each can be read beside the others.
 
-A spec's prose gives rise to its requirements; a walkthrough proposes the code that will
+A spec's prose gives rise to its requirements; a codewalk proposes the code that will
 meet them, and once it's written, shows it. The link at each step is already there:
 
 - the prose cites the requirements it gives rise to (see `spec.py`);
 - code, written or proposed, carries tracey's markers, `// r[impl id]` and
   `// r[verify id]`, and a draft in a `walk proposed` block carries them too;
-- a walkthrough's prose can cite requirements, as `[[r:id]]` or an ID in backticks.
+- a codewalk's prose can cite requirements, as `[[r:id]]` or an ID in backticks.
 
-So for each block of a walkthrough, `margin` finds the requirements it proposes,
+So for each block of a codewalk, `margin` finds the requirements it proposes,
 implements, verifies or cites, and for each, the prose in its spec that gave rise to it:
-the walkthrough page shows them in its margin, level with the block. And `uses` goes the
-other way, for a spec's margin: for each requirement, the walkthroughs that propose,
+the codewalk page shows them in its margin, level with the block. And `uses` goes the
+other way, for a spec's margin: for each requirement, the codewalks that propose,
 implement or cite it.
 """
 
@@ -30,24 +30,24 @@ Role = Literal["proposes", "proposes a test of", "implements", "verifies", "cite
 
 
 class Link(BaseModel):
-    """A requirement as one block of a walkthrough has it."""
+    """A requirement as one block of a codewalk has it."""
 
     id: str
     role: Role
-    # The walkthrough's block: its first line
+    # The codewalk's block: its first line
     line: int
 
 
 # r[impl spec.trail]
 def links(walk: Walk) -> list[Link]:
-    """Every requirement each block of a walkthrough proposes, implements, verifies or cites.
+    """Every requirement each block of a codewalk proposes, implements, verifies or cites.
 
     In order, once for each block and role.
 
     Parameters
     ----------
     walk : Walk
-        The walkthrough.
+        The codewalk.
 
     Returns
     -------
@@ -68,12 +68,12 @@ def links(walk: Walk) -> list[Link]:
     for ref in walk.refs:
         at = block_of(ref.line)
         if ref.kind == "proposal":
-            for prefix, kind, rid in MARKER.findall(ref.draft or ""):
+            for prefix, kind, rid, _ in MARKER.findall(ref.draft or ""):
                 rid = tracey.key(prefix, rid)
                 out.append(Link(id=rid, role="proposes" if kind == "impl" else "proposes a test of", line=at))
         elif ref.kind == "embed" and ref.symbol:
             text = ref.symbol.text(files)
-            for prefix, kind, rid in MARKER.findall(text):
+            for prefix, kind, rid, _ in MARKER.findall(text):
                 rid = tracey.key(prefix, rid)
                 out.append(Link(id=rid, role="implements" if kind == "impl" else "verifies", line=at))
         elif ref.kind == "embed" and ref.requirement:
@@ -113,16 +113,16 @@ def origin(ctx: Context, rid: str, views: dict[str, prose.SpecView]) -> Origin |
 
 
 class Use(BaseModel):
-    """A walkthrough's use of a requirement."""
+    """A codewalk's use of a requirement."""
 
-    walkthrough: str
+    codewalk: str
     title: str
     line: int
     role: Role
 
 
 def uses(ctx: Context) -> dict[str, list[Use]]:
-    """For each requirement, the walkthroughs that propose, implement, verify or cite it.
+    """For each requirement, the codewalks that propose, implement, verify or cite it.
 
     Parameters
     ----------
@@ -135,8 +135,8 @@ def uses(ctx: Context) -> dict[str, list[Use]]:
         By requirement ID.
     """
     out: dict[str, list[Use]] = {}
-    for rel in ctx.walkthroughs():
+    for rel in ctx.codewalks():
         w = Walk(ctx, rel)
         for link in links(w):
-            out.setdefault(link.id, []).append(Use(walkthrough=rel, title=w.title, line=link.line, role=link.role))
+            out.setdefault(link.id, []).append(Use(codewalk=rel, title=w.title, line=link.line, role=link.role))
     return out

@@ -171,7 +171,7 @@ def index_file(rel: str, source: bytes, parser: Parser, root: Path | None = None
     def add(outer: Node, inner: Node, siblings: list[Node], qualified: list[str], kind: str, signature: str, doc: tuple[str, str]):
         # `outer` takes in any decorators; `inner` is the definition itself
         above = _comments_above(outer, siblings)
-        markers = [(m[2], tracey.key(m[1], m[3])) for n in above for m in MARKER.finditer(_text(n, source))]
+        markers = [(m[2], tracey.key(m[1], m[3]), int(m[4] or 1)) for n in above for m in MARKER.finditer(_text(n, source))]
         start = (above[0] if above else outer).start_point.row + 1
         defines = inner.type in ("function_definition", "class_definition")
         out.append(

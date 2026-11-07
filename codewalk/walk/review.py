@@ -1,6 +1,6 @@
 """What a reader has reviewed.
 
-For each walkthrough, it's each reference's code as it stood when it was last marked
+For each codewalk, it's each reference's code as it stood when it was last marked
 reviewed. A reference whose code has changed since shows as changed, with the difference,
 until it's reviewed again.
 
@@ -25,14 +25,14 @@ class Reviewed(BaseModel):
     text: str
 
 
-# Walkthrough, then reference as written, then what was reviewed
+# Codewalk, then reference as written, then what was reviewed
 ReviewFile = TypeAdapter(dict[str, dict[str, Reviewed]])
 
 
 class ReviewState:
     """What's been reviewed, as it was, kept in `codewalk.review.json` at the root.
 
-    By walkthrough, then by reference: the code's digest and text when it was reviewed,
+    By codewalk, then by reference: the code's digest and text when it was reviewed,
     so a change since can be seen and shown.
 
     Parameters
@@ -72,12 +72,12 @@ class ReviewState:
         self.save()
 
     def forget_missing(self, doc: str, refs: set[str]) -> None:
-        """Drop what's recorded for references the walkthrough no longer makes.
+        """Drop what's recorded for references the codewalk no longer makes.
 
         Parameters
         ----------
         doc : str
-            The walkthrough.
+            The codewalk.
         refs : set of str
             The references it makes now, as written.
         """

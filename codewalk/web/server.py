@@ -1,18 +1,20 @@
-"""The web view: walkthroughs in the browser, with their code, an editor and live reload.
+"""The web view: codewalks in the browser, with their code, an editor and live reload.
 
-Each walkthrough is rendered with its code, the code in its file beside it, a browser
+Each codewalk is rendered with its code, the code in its file beside it, a browser
 editor with symbol completion, and live reload as the Markdown or the code changes.
 
-Local only: it listens on 127.0.0.1, and writes only walkthroughs and the review file.
+Local only: it listens on 127.0.0.1, and writes only codewalks and the review file.
 
 Pages and the API are plain functions on `App`, called from Starlette's routes, so they
-can be tested without a server. The index and the walkthroughs are shared state, so every
+can be tested without a server. The index and the codewalks are shared state, so every
 call that reads them holds `App.lock`; Starlette runs each in a worker thread.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import os
 import re
 import threading
 from contextlib import asynccontextmanager
@@ -29,8 +31,8 @@ from starlette.staticfiles import StaticFiles
 
 from codewalk.code.highlight import highlight_lines
 from codewalk.spec import prose, trail
-from codewalk.walk import notes
-from codewalk.walk.doc import Context, Walk, settle
+from codewalk.walk import notes, prd
+from codewalk.walk.doc import STAGES, Context, Walk, set_front_matter, settle
 from codewalk.walk.library import Library
 from codewalk.web.render import _slug, diff_rows, page_data_json, render, requirement_html, templates
 
@@ -46,12 +48,33 @@ STATES = {
 STATIC = Path(__file__).parent / "static"
 
 
+def static_url(name: str) -> str:
+    """A static file's address, with a digest of what's in it.
+
+    A browser keeps a script or stylesheet it's fetched, and may use it again without
+    asking whether it's changed; with the digest in the address, a changed file is a new
+    address, so a page never runs with the script it had before codewalk was updated.
+
+    Parameters
+    ----------
+    name : str
+        The file, in the static folder.
+
+    Returns
+    -------
+    str
+        Its address, as `/static/name?v=digest`.
+    """
+    digest = hashlib.sha256((STATIC / name).read_bytes()).hexdigest()[:10]
+    return f"/static/{name}?v={digest}"
+
+
 class Change(BaseModel):
     """What changed, as told to each open page."""
 
     # The code or the spec changed
     code: bool = False
-    # Walkthroughs whose Markdown changed, as paths from the root
+    # Codewalks whose Markdown changed, as paths from the root
     docs: list[str] = []
     review: bool = False
 
@@ -76,13 +99,15 @@ class App:
     # ---- Pages ----------------------------------------------------------------------
 
     def page(self, template: str, title: str, view: str, data: dict, **context) -> str:
-        return templates.get_template(template).render(title=title, view=view, data_json=page_data_json({"view": view, **data}), **context)
+        return templates.get_template(template).render(
+            title=title, view=view, data_json=page_data_json({"view": view, **data}), static=static_url, **context
+        )
 
     def index_page(self) -> str:
         library = Library.of(self.ctx)
         return self.page(
             "index.html",
-            "Walkthroughs",
+            "Codewalks",
             "index",
             {},
             library=library,
@@ -101,7 +126,7 @@ class App:
 
     # r[impl spec.trail]
     def walk_body(self, rel: str, text: str | None = None) -> tuple[str, dict, Walk]:
-        """A walkthrough, with the requirements each block has in its margin.
+        """A codewalk, with the requirements each block has in its margin.
 
         Beside each block, the margin shows the requirements it proposes, implements,
         verifies or cites, each with the prose it came from.
@@ -109,7 +134,7 @@ class App:
         Parameters
         ----------
         rel : str
-            The walkthrough, from the root.
+            The codewalk, from the root.
         text : str or None
             Its Markdown, if not as saved (while it's being edited).
 
@@ -120,7 +145,7 @@ class App:
         data : dict
             The page's data; `margin` is set if there's a margin.
         walk : Walk
-            The walkthrough, parsed.
+            The codewalk, parsed.
         """
         w = Walk(self.ctx, rel, text)
         body, data = render(w)
@@ -160,6 +185,7 @@ class App:
             headings=w.headings(),
             summary=library.get(rel),
             titles=library.titles(),
+            stages=STAGES,
             errors=sum(1 for p in problems if p.severity == "error"),
             changed=sum(1 for p in problems if p.severity == "warning"),
         )
@@ -209,7 +235,7 @@ class App:
             else:
                 card["href"], card["text"] = "#", None
             card["uses"] = [
-                {"href": f"/walk/{u.walkthrough}?line={u.line}", "title": u.title, "role": self.ROLES[u.role]} for u in used.get(c.id, [])
+                {"href": f"/walk/{u.codewalk}?line={u.line}", "title": u.title, "role": self.ROLES[u.role]} for u in used.get(c.id, [])
             ]
             groups.setdefault(c.lines[0], []).append(card)
         html = templates.get_template("spec_body.html").render(body=body, groups=sorted(groups.items()))
@@ -226,11 +252,12 @@ class App:
         self.writable(rel)
         return {"reconciled": prose.reconcile(self.ctx, rel, rid)}
 
+    # r[impl ui.edit-margin]
     def edit_page(self, rel: str) -> str:
         self.writable(rel)
         if self.is_spec(rel):
             body, data, _, w = self.spec_body(rel)
-            data.update({"doc": rel, "spec": True, "problems": []})
+            data.update({"doc": rel, "spec": True, "problems": [], "margin": True})
             return self.page("edit.html", f"Editing {w.title}", "edit", data, rel=rel, body=body, text=w.text, spec=True)
         body, data, w = self.walk_body(rel)
         data.update({"doc": rel, "problems": [p.model_dump() for p in w.problems()]})
@@ -257,12 +284,13 @@ class App:
         ]
         return {"file": rel, "lines": highlight_lines(path), "outline": outline, "zed": f"zed://file/{path}"}
 
+    # r[impl term.glossary]
     def glossary_page(self) -> str:
         g = self.ctx.glossary
-        # Where each is cited or mentioned, across the walkthroughs and specs
+        # Where each is cited or mentioned, across the codewalks and specs
         uses: dict[str, list[str]] = {}
         pattern = g.mentions()
-        for rel in sorted(set(self.ctx.walkthroughs()) | set(self.ctx.spec_paths())):
+        for rel in sorted(set(self.ctx.codewalks()) | set(self.ctx.spec_paths())):
             text = (self.ctx.root / rel).read_text()
             for key in {f"t:{m}" for m in re.findall(r"(?:\[\[t:|\(term:)([a-z0-9.\-]+)", text)} | {
                 f"f:{m}" for m in re.findall(r"(?:\[\[f:|\(fact:)([a-z0-9.\-]+)", text)
@@ -274,18 +302,29 @@ class App:
                     if rel not in uses.setdefault(f"t:{tid}", []):
                         uses[f"t:{tid}"].append(rel)
 
-        def view(rel: str) -> str:
-            return "spec" if rel in self.ctx.spec_paths() else "walk"
+        specs = set(self.ctx.spec_paths())
 
-        terms = sorted(g.terms.values(), key=lambda d: d.id)
-        facts = sorted(g.facts.values(), key=lambda d: (("documented", "observed", "assumed").index(d.status or "assumed"), d.id))
+        def view(rel: str) -> str:
+            return "spec" if rel in specs else "walk"
+
+        groups = []
+        for rel in {d.file for d in [*g.terms.values(), *g.facts.values()]}:
+            w = Walk(self.ctx, rel)
+            terms = sorted((d for d in g.terms.values() if d.file == rel), key=lambda d: d.id)
+            facts = sorted(
+                (d for d in g.facts.values() if d.file == rel),
+                key=lambda d: (("documented", "observed", "assumed").index(d.status or "assumed"), d.id),
+            )
+            # Specs first, as the index lists them: by folder, then lighter first; then the rest
+            order = (rel not in specs, rel.split("/")[:-1], w.meta.weight is None, w.meta.weight or 0, w.title.lower())
+            groups.append((order, {"rel": rel, "title": w.title, "view": view(rel), "terms": terms, "facts": facts}))
         return self.page(
             "glossary.html",
             "Glossary",
             "glossary",
             {},
-            terms=terms,
-            facts=facts,
+            groups=[grp for _, grp in sorted(groups, key=lambda x: x[0])],
+            counts=(len(g.terms), len(g.facts)),
             uses=uses,
             view_of=view,
             slug=_slug,
@@ -377,7 +416,7 @@ class App:
         to: int | None = None,
         about: int | None = None,
     ) -> dict:
-        """Write a note into a walkthrough.
+        """Write a note into a codewalk.
 
         A new question after line `after`, or a note added to the thread that starts on line
         `thread`.
@@ -385,7 +424,7 @@ class App:
         Parameters
         ----------
         rel : str
-            The walkthrough, from the root.
+            The codewalk, from the root.
         kind : str
             The note's kind; a new thread is always a question.
         body : str
@@ -432,7 +471,7 @@ class App:
         return {"written": True, "author": author}
 
     def resolve(self, rel: str, thread: int, mode: str) -> dict:
-        """Take a settled thread out of a walkthrough: into its changelog, or away."""
+        """Take a settled thread out of a codewalk: into its changelog, or away."""
         import datetime
 
         path = self.writable(rel)
@@ -456,6 +495,96 @@ class App:
             raise FileNotFoundError(f"no written proposal on line {line}")
         path.write_text(settle(w.text, line, ref.target))
         return {"settled": ref.target}
+
+    # r[impl proposal.agree]
+    def agree(self, rel: str, line: int, end: int, body: str) -> dict:
+        """Agree the proposal on line `line`: a decision in the thread after its block, or a new one.
+
+        Parameters
+        ----------
+        rel : str
+            The codewalk, from the root.
+        line : int
+            The proposal's line: its name's, as the reference has it.
+        end : int
+            The block's last line, which a new thread goes after.
+        body : str
+            The decision, in the person's words.
+
+        Returns
+        -------
+        dict
+            `agreed`, the proposal's name, and the `author` it was written as.
+        """
+        path = self.writable(rel)
+        w = Walk(self.ctx, rel)
+        ref = next((r for r in w.refs if r.kind == "proposal" and r.line == line), None)
+        if ref is None:
+            raise FileNotFoundError(f"no proposal on line {line}")
+        author = self.ctx.config.who(self.ctx.root)
+        t = w.thread_after(ref)
+        text = notes.reply(w.text, t, "decision", author, body) if t else notes.ask(w.text, end, author, body, kind="decision")
+        path.write_text(text)
+        return {"agreed": ref.target, "author": author}
+
+    # r[impl prd.stage-set]
+    def set_stage(self, rel: str, stage: str) -> dict:
+        """Set a PRD's stage in its front matter, from its page."""
+        if stage not in STAGES:
+            raise ValueError(f"not a stage: {stage}")
+        path = self.writable(rel)
+        if Walk(self.ctx, rel).meta.kind != "prd":
+            raise ValueError(f"{rel} isn't a PRD")
+        path.write_text(set_front_matter(path.read_text(), "stage", stage))
+        return {"stage": stage}
+
+    # r[impl prd.start]
+    # r[impl prd.from-thread]
+    # r[impl serve.local]
+    def start_prd(self, title: str, ask: str, source: str | None = None, thread: int | None = None) -> dict:
+        """Start a PRD from the index, or from a thread in a codewalk, and say where to open it.
+
+        From a thread, the PRD's request says which codewalk it came from, and a note added
+        to the thread says where the PRD is.
+
+        Parameters
+        ----------
+        title : str
+            The PRD's title.
+        ask : str
+            What the person wants, in their own words.
+        source : str or None
+            The codewalk the thread is in, from the root, if it's started from one.
+        thread : int or None
+            The line the thread starts on.
+
+        Returns
+        -------
+        dict
+            `started`, the PRD's path, and `href`, where to open it.
+
+        Raises
+        ------
+        ValueError
+            If there's a PRD by that name already, or the thread isn't there.
+        """
+        origin = None
+        if source and thread:
+            w = Walk(self.ctx, source)
+            found = next((t for t in w.threads if t.line == thread), None)
+            if found is None:
+                raise ValueError(f"no thread on line {thread} of {source}")
+            origin = (self.writable(source), found)
+            ask = f"{ask.rstrip()}\n\nFrom [{w.title}]({os.path.relpath(source, prd.FOLDER)})."
+        try:
+            rel = prd.start(self.ctx, title, ask)
+        except FileExistsError as e:
+            raise ValueError(f"there's a PRD at {e} already") from e
+        if origin:
+            path, found = origin
+            note = f"Taken up in a PRD: [{title}]({os.path.relpath(rel, os.path.dirname(source))})."
+            path.write_text(notes.reply(path.read_text(), found, "note", self.ctx.config.who(self.ctx.root), note))
+        return {"started": rel, "href": f"/walk/{rel}"}
 
     # r[impl review.people]
     def review(self, rel: str, ref: str | None) -> dict:
@@ -601,6 +730,18 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
         b = await request.json()
         return JSONResponse(await threaded(app.resolve, b["path"], int(b["thread"]), b["mode"]))
 
+    async def stage(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.set_stage, b["path"], b["stage"]))
+
+    async def start_prd(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.start_prd, b["title"], b["ask"], b.get("source"), b.get("thread")))
+
+    async def agree(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.agree, b["path"], int(b["line"]), int(b["end"]), b["text"]))
+
     async def settle_(request: Request):
         b = await request.json()
         return JSONResponse(await threaded(app.settle, b["path"], int(b["line"])))
@@ -634,7 +775,7 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
         return JSONResponse({"error": str(exc)}, status_code=409)
 
     async def forbidden(request: Request, exc):
-        return JSONResponse({"error": f"not a walkthrough: {exc}"}, status_code=403)
+        return JSONResponse({"error": f"not a codewalk: {exc}"}, status_code=403)
 
     @asynccontextmanager
     async def lifespan(_):
@@ -661,6 +802,9 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
             Route("/api/review", review, methods=["POST"]),
             Route("/api/note", note, methods=["POST"]),
             Route("/api/settle", settle_, methods=["POST"]),
+            Route("/api/agree", agree, methods=["POST"]),
+            Route("/api/stage", stage, methods=["POST"]),
+            Route("/api/prd", start_prd, methods=["POST"]),
             Route("/api/resolve", resolve, methods=["POST"]),
             Route("/api/reconcile", reconcile, methods=["POST"]),
             Route("/events", events),

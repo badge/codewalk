@@ -1,54 +1,39 @@
 ---
 title: "{title}"
-summary: "One sentence: what changes, for whom, and why."
+summary: ""
 kind: prd
+stage: problem
 tags: []
 related: []
 ---
 
 # {title}
 
-> [!note] @{author}: A PRD as a walkthrough. Everything it proposes is drafted in
-> `walk proposed` blocks; implementing it settles each one, and what's left is a
-> walkthrough of what actually happened, with the plan kept beside it.
-
 ## The problem
 
-What's wrong or missing now, and who it affects. Name the code involved:
+<!-- Why we want a change. Name the code it's about as it stands, in `walk` blocks. -->
 
-```walk
-// the existing code this is about, one name a line
-```
+## What we want
 
-## The outcome
+<!-- At the prose stage: what we'll do about it, in words. -->
 
-What's true once this is done, in terms someone can check.
+## The spec
 
-## What the spec says
-
-The prose this change gives rise to, citing each requirement it adds or changes as
-`[[r:new.requirement.id]]` until the requirement is written, and as the ID in backticks
-once it is. Define new words as terms and anything we rely on about the world as facts
-(`t[word]`, `f[id] assumed`), in the glossary.
+<!-- At the spec stage: the requirements that follow, as they'll read in the spec. A
+change to one is written with its version bumped, `r[id+2]`; a removal as
+`r[id+2] removed`. -->
 
 ## The code
 
-How it will work, step by step, each new or changed piece drafted under the name it
-will have, with the requirement markers it will carry:
+<!-- At the code stage: the data model in full, and the code that implements each
+requirement, in full where it's intricate and by its signature where it's routine. -->
 
-```walk proposed rust
-Type::new_method
-// r[impl new.requirement.id]
-pub fn new_method(&self) {
-    todo!()
-}
-```
+## Terms
 
-## Testing
-
-What proves it: the tests, drafted like the code, each marked with the requirement it
-verifies.
+## Facts
 
 ## Questions
 
-> [!question] @{author}: What's still to decide?
+## Changelog
+
+What was asked here and how it was settled, newest first.

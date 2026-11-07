@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% block crumb %}<a href="/">Walkthroughs</a> / <a href="/{{ 'spec' if spec else 'walk' }}/{{ rel }}">{{ rel }}</a> / edit{% endblock %}
+{% block crumb %}<a href="/">Codewalks</a> / <a href="/{{ 'spec' if spec else 'walk' }}/{{ rel }}">{{ rel }}</a> / edit{% endblock %}
 {% block actions %}
   <span class="save-state" id="save-state">Saved</span>
+  {% if spec %}<button class="tb" data-action="toggle-margin" id="margin-toggle" title="The requirements beside the preview, with their prose (m)">Requirements</button>{% endif %}
   <button class="tb" data-action="sync" id="sync-toggle" title="Scroll the Markdown and the preview together">Linked scrolling</button>
   <button class="tb primary" data-action="save" title="Save (⌘S)">Save <kbd>⌘S</kbd></button>
   <a class="tb" href="/{{ 'spec' if spec else 'walk' }}/{{ rel }}" data-action="done" title="Back to reading, at this point (Esc)">Done</a>

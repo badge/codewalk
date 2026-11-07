@@ -13,7 +13,7 @@
       </div>
       {% if c.prose %}<a class="mc-prose" href="{{ c.prose_href }}" title="The prose this requirement comes from"><span class="mc-label">From the prose</span>{{ c.prose }}</a>{% endif %}
       {% if c.text %}<div class="mc-text">{{ c.text }}</div>{% endif %}
-      {% if c.uses %}<div class="mc-uses"><span class="mc-label">In walkthroughs</span>
+      {% if c.uses %}<div class="mc-uses"><span class="mc-label">In codewalks</span>
         {% for u in c.uses %}<a href="{{ u.href }}">{{ u.title }}</a> <span class="mc-role">{{ u.role }}</span>{% if not loop.last %}<br>{% endif %}{% endfor %}</div>{% endif %}
       {% if c.diff %}
       <details class="mc-diff"><summary>{{ c.diff_label }}</summary>

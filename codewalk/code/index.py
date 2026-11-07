@@ -1,4 +1,4 @@
-"""What a walkthrough can refer to: every item in the source, and every requirement in the spec.
+"""What a codewalk can refer to: every item in the source, and every requirement in the spec.
 
 The source is Rust or Python, found with tree-sitter. Rust is indexed here; Python in
 `python.py`.
@@ -41,7 +41,7 @@ ITEM_KINDS = {
 
 
 class Symbol(BaseModel):
-    """One thing a walkthrough can point at."""
+    """One thing a codewalk can point at."""
 
     qualified: str
     kind: str
@@ -52,8 +52,9 @@ class Symbol(BaseModel):
     end: int
     signature: str
     doc: str
-    # Requirement markers on it, `impl` or `verify`, with their IDs
-    markers: list[tuple[str, str]] = []
+    # Requirement markers on it, `impl` or `verify`, with their IDs and the versions they
+    # name, 1 without a suffix
+    markers: list[tuple[str, str, int]] = []
     # The rest of its documentation after the summary: for Python, a NumPy-style
     # docstring's extended summary and sections (Parameters, Returns, …)
     details: str = ""
@@ -101,7 +102,7 @@ class SourceFiles:
         return lines
 
 
-MARKER = re.compile(rf"(?://|#)\s*([a-z][a-z0-9]*)\[(impl|verify)\s+({tracey.ID})\]")
+MARKER = re.compile(rf"(?://|#)\s*([a-z][a-z0-9]*)\[(impl|verify)\s+({tracey.ID}){tracey.VERSION}\]")
 
 
 def module_path(rel: str) -> list[str]:
@@ -170,7 +171,7 @@ def _leading(node: Node, siblings: list[Node]) -> list[Node]:
     return above
 
 
-def _doc(above: list[Node], source: bytes) -> tuple[str, list[tuple[str, str]]]:
+def _doc(above: list[Node], source: bytes) -> tuple[str, list[tuple[str, str, int]]]:
     """The `///` doc text and the requirement markers in the comments above an item."""
     doc, markers = [], []
     for n in above:
@@ -180,7 +181,7 @@ def _doc(above: list[Node], source: bytes) -> tuple[str, list[tuple[str, str]]]:
         if t.startswith("///"):
             doc.append(t[3:].strip())
         for m in MARKER.finditer(t):
-            markers.append((m.group(2), tracey.key(m.group(1), m.group(3))))
+            markers.append((m.group(2), tracey.key(m.group(1), m.group(3)), int(m.group(4) or 1)))
     return " ".join(doc).strip(), markers
 
 
@@ -273,6 +274,8 @@ class Trace(BaseModel):
 
     kind: str
     requirement: str
+    # The version of the requirement it names, `+N` after the ID; 1 without
+    version: int = 1
     file: str
     line: int
     symbol: Symbol | None = None
@@ -342,7 +345,7 @@ class CodeIndex:
             self._traces = None
         return changed
 
-    # r[impl spec.traces]
+    # r[impl spec.traces+2]
     def traces(self) -> dict[str, list[Trace]]:
         """For each requirement ID, the markers that name it, in file and line order.
 
@@ -362,7 +365,9 @@ class CodeIndex:
                         around = [s for s in spans if s.start <= n <= s.end]
                         sym = min(around, key=lambda s: s.end - s.start, default=None)
                         rid = tracey.key(m.group(1), m.group(3))
-                        out.setdefault(rid, []).append(Trace(kind=m.group(2), requirement=rid, file=rel, line=n, symbol=sym))
+                        version = int(m.group(4) or 1)
+                        trace = Trace(kind=m.group(2), requirement=rid, version=version, file=rel, line=n, symbol=sym)
+                        out.setdefault(rid, []).append(trace)
             self._traces = out
         return self._traces
 

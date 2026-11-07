@@ -16,12 +16,13 @@ to it, so a reader can hover any use of it for what it means.
 A **fact** is something about the world we rely on and don't control: an API's
 behaviour, a market's rules. It says how we know it: `documented`, `observed` or
 `assumed` (the default). Facts aren't requirements, which say what we do; a requirement
-or a walkthrough cites the facts it rests on, so when one turns out wrong, what rests on
+or a codewalk cites the facts it rests on, so when one turns out wrong, what rests on
 it can be found.
 
 Cite either explicitly with `[[t:deadband]]` and `[[f:ercot.settlement-periods]]`, or as
 links, `[the deadband](term:deadband)` and `[periods](fact:ercot.settlement-periods)`.
-Tracey ignores both kinds of line; it only reads `r[...]`.
+Each is defined in the spec it belongs to, so the spec reads complete on its own. We
+assume tracey passes over both kinds of line (`f[tracey.other-markers]`, not yet checked).
 """
 
 from __future__ import annotations
@@ -32,7 +33,9 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-DEF_LINE = re.compile(r"^(t|f)\[([a-z0-9][a-z0-9.\-]*)\](?:[ \t]+(documented|observed|assumed))?[ \t]*$")
+# A PRD's front matter: its definitions are its own proposals, not the glossary's
+PRD = re.compile(r"\A---\n(?:.*\n)*?kind:[ \t]*[\"']?prd[\"']?[ \t]*\n(?:.*\n)*?---", re.MULTILINE)
+DEF_LINE = re.compile(r"^(t|f)\[([a-z0-9][a-z0-9.\-]*)\](?:[ \t]+(documented|observed|assumed|cited-only))?[ \t]*$")
 STATUSES = ("documented", "observed", "assumed")
 
 
@@ -41,6 +44,9 @@ class Definition(BaseModel):
     id: str
     # How a fact is known; None for a term
     status: Literal["documented", "observed", "assumed"] | None = None
+    # A term linked only where it's cited, `t[id] cited-only`, since its word is often used
+    # in its ordinary sense
+    cited_only: bool = False
     file: str
     line: int
     text: str
@@ -49,6 +55,46 @@ class Definition(BaseModel):
     def words(self) -> str:
         """A term as it's written in prose."""
         return self.id.replace("-", " ")
+
+
+# r[impl term.define+2]
+def parse(rel: str, text: str) -> list[Definition]:
+    """The terms and facts defined in one file's text, in order.
+
+    Parameters
+    ----------
+    rel : str
+        The file, from the root.
+    text : str
+        Its Markdown.
+
+    Returns
+    -------
+    list of Definition
+    """
+    out = []
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if not (m := DEF_LINE.match(line)):
+            continue
+        body = []
+        for nxt in lines[i + 1 :]:
+            if not nxt.strip() or DEF_LINE.match(nxt) or nxt.startswith("r["):
+                break
+            body.append(nxt.strip())
+        kind = "term" if m.group(1) == "t" else "fact"
+        # `cited-only` is a term's; a fact's status is one of the others
+        if kind == "fact" and m.group(3) == "cited-only":
+            continue
+        status = (m.group(3) or "assumed") if kind == "fact" else None
+        cited_only = m.group(3) == "cited-only"
+        out.append(Definition(kind=kind, id=m.group(2), status=status, cited_only=cited_only, file=rel, line=i + 1, text=" ".join(body)))
+    return out
+
+
+def is_prd(text: str) -> bool:
+    """Whether a file's front matter says it's a PRD."""
+    return bool(PRD.match(text))
 
 
 class Glossary:
@@ -73,8 +119,9 @@ class Glossary:
         self._pattern: re.Pattern | None = None
         self.refresh()
 
-    # r[impl term.define]
-    # r[impl term.errors]
+    # r[impl term.define+2]
+    # r[impl term.errors+2]
+    # r[impl prd.terms]
     def refresh(self) -> bool:
         paths = sorted({p for g in self.globs for p in self.root.glob(g) if p.is_file() and p.suffix == ".md"})
         mtimes = {str(p.relative_to(self.root)): p.stat().st_mtime for p in paths}
@@ -86,28 +133,14 @@ class Glossary:
         dups: dict[str, list[Definition]] = {}
         for p in paths:
             rel = str(p.relative_to(self.root))
-            lines = p.read_text().split("\n")
-            for i, line in enumerate(lines):
-                m = DEF_LINE.match(line)
-                if not m:
-                    continue
-                body = []
-                for nxt in lines[i + 1 :]:
-                    if not nxt.strip() or DEF_LINE.match(nxt) or nxt.startswith("r["):
-                        break
-                    body.append(nxt.strip())
-                kind = "term" if m.group(1) == "t" else "fact"
-                d = Definition(
-                    kind=kind,
-                    id=m.group(2),
-                    status=(m.group(3) or "assumed") if kind == "fact" else None,
-                    file=rel,
-                    line=i + 1,
-                    text=" ".join(body),
-                )
-                table = terms if kind == "term" else facts
+            text = p.read_text()
+            # A PRD's definitions are its own, proposed, not the spec's
+            if is_prd(text):
+                continue
+            for d in parse(rel, text):
+                table = terms if d.kind == "term" else facts
                 if d.id in table:
-                    dups.setdefault(f"{m.group(1)}:{d.id}", [table[d.id]]).append(d)
+                    dups.setdefault(f"{d.kind[0]}:{d.id}", [table[d.id]]).append(d)
                 table[d.id] = d
         self.terms, self.facts, self.duplicates = terms, facts, dups
         self._pattern = None
@@ -129,20 +162,21 @@ class Glossary:
         kind, _, rid = ref.partition(":")
         return (self.terms if kind == "t" else self.facts if kind == "f" else {}).get(rid)
 
+    # r[impl term.cite+2]
     def mentions(self) -> re.Pattern | None:
-        """A pattern for every term as it's written in prose.
+        """A pattern for every term as it's written in prose, but those cited only.
 
         Longest first, singular or plural, whole words only, ignoring case.
 
         Returns
         -------
         re.Pattern or None
-            None if no terms are defined.
+            None if no terms are to be found in prose.
         """
-        if self._pattern is None and self.terms:
-            words = sorted((d.words for d in self.terms.values()), key=len, reverse=True)
+        if self._pattern is None:
+            words = sorted((d.words for d in self.terms.values() if not d.cited_only), key=len, reverse=True)
             alts = "|".join(re.escape(w).replace(r"\ ", r"[ \-]") for w in words)
-            self._pattern = re.compile(rf"\b({alts})(?:s|es)?\b", re.IGNORECASE)
+            self._pattern = re.compile(rf"\b({alts})(?:s|es)?\b", re.IGNORECASE) if words else None
         return self._pattern
 
     def term_for(self, mention: str) -> Definition | None:

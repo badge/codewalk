@@ -13,7 +13,7 @@
     get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
     set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
   };
-  // The reading view for this page's file: a walkthrough, or a spec
+  // The reading view for this page's file: a codewalk, or a spec
   const reading = () => (data.spec ? "spec" : "walk");
   const api = async (path, body) => {
     const res = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
@@ -67,7 +67,7 @@
     card.style.top = `${Math.max(56, top)}px`;
   }
   function symbolCard(s) {
-    const reqs = (s.markers || []).map(([k, id]) => `<span>${esc(k)} ${esc(id)}</span>`).join("");
+    const reqs = (s.markers || []).map(([k, id, v]) => `<span>${esc(k)} ${esc(id)}${v > 1 ? `+${v}` : ""}</span>`).join("");
     return `<div class="hc-top"><span class="kind k-${esc(s.kind)}">${esc(s.kind)}</span><span class="hc-q">${esc(s.qualified)}</span></div>
       <div class="hc-sig">${esc(s.signature)}</div>
       ${s.doc ? `<div class="hc-doc">${esc(s.doc)}</div>` : ""}
@@ -107,13 +107,35 @@
   const NAME = /^(n|nf|nc|nn|nx|nd|ne|fm)$/;
 
   // r[impl ui.context]
+  // r[impl ui.context-place]
+  // What you were reading, and where it was in the window: the block whose name was
+  // clicked, else the one at the top of the window
+  let clicked = null;
+  document.addEventListener("click", (e) => { clicked = e.target.closest?.("#prose [data-md]") || clicked; }, true);
+  // Scrolling to read elsewhere means the block clicked last isn't what's being read
+  addEventListener("wheel", () => { clicked = null; }, { passive: true });
+  function readingPlace() {
+    const top = $(".topbar").getBoundingClientRect().bottom;
+    const inView = (el) => el && el.getBoundingClientRect().bottom > top && el.getBoundingClientRect().top < innerHeight;
+    const el = inView(clicked) ? clicked : $$("#prose [data-md]").find((b) => b.getBoundingClientRect().bottom > top + 4);
+    return el ? [el, el.getBoundingClientRect().top] : null;
+  }
+  // Put it back where it was, once the layout has changed around it
+  function keepPlace(place) {
+    if (!place) return;
+    const [el, was] = place;
+    scrollBy({ top: el.getBoundingClientRect().top - was, left: 0 });
+    layoutMargin();
+  }
   async function openContext({ file, start, end, line, focusRef }) {
     if (!panel) return;
     hideCard();
     const view = await api(`/api/file?path=${encodeURIComponent(file)}`);
     panelFile = view;
+    const place = panel.hidden && data.view !== "edit" ? readingPlace() : null;
     panel.hidden = false;
     panel.parentElement.classList.add("with-context");
+    keepPlace(place);
     const rows = view.lines
       .map((l, i) => `<span class="row" data-line="${i + 1}"><span class="ln">${i + 1}</span><span class="lc">${l || " "}</span></span>`)
       .join("");
@@ -167,8 +189,10 @@
   }
   function closeContext() {
     if (!panel) return;
+    const place = data.view !== "edit" ? readingPlace() : null;
     panel.hidden = true;
     panel.parentElement.classList.remove("with-context");
+    keepPlace(place);
   }
   function contextFor(ref) {
     const s = data.symbols?.[ref];
@@ -299,10 +323,21 @@
     } else if (action === "resolve") {
       const thread = btn.closest(".thread");
       const mode = btn.dataset.mode;
-      if (mode === "remove" && !confirm("Remove this thread from the walkthrough altogether?")) return;
+      if (mode === "remove" && !confirm("Remove this thread from the codewalk altogether?")) return;
       await api("/api/resolve", { path: data.doc, thread: +thread.dataset.thread, mode });
       toast(mode === "changelog" ? "Moved to the changelog, as one line" : "Removed");
       refresh();
+    } else if (action === "agree" && fig) {
+      // r[impl proposal.agree]
+      composer(fig, { line: +fig.dataset.md, end: +fig.dataset.mdEnd }, `Agree ${fig.dataset.ref}`, false, { endpoint: "/api/agree", text: "Agreed: write it as proposed." });
+    } else if (action === "prd-from-thread") {
+      // r[impl prd.from-thread]
+      prdFromThread(btn.closest(".thread"));
+    } else if (action === "new-prd") {
+      // r[impl prd.start]
+      const form = $("#new-prd");
+      form.hidden = false;
+      $("input[name=title]", form).focus();
     } else if (action === "settle" && fig) {
       const r = await api("/api/settle", { path: data.doc, line: +fig.dataset.md });
       toast(`Settled: ${r.settled} is an ordinary excerpt now`);
@@ -318,8 +353,59 @@
     }
   });
 
+  // Starting a PRD from a thread: the same as from the index, filled in from the thread,
+  // and the thread is given a note saying where the PRD is
+  function prdFromThread(thread) {
+    $$(".thread .new-prd").forEach((f) => f.remove());
+    const first = $(".note-body", thread)?.innerText.trim() || "";
+    const form = document.createElement("form");
+    form.className = "new-prd";
+    form.innerHTML = `<label>Title <input name="title" required autocomplete="off" placeholder="What the change is, in a few words"></label>
+      <label>What you want <textarea name="ask" rows="4" required></textarea></label>
+      <p class="hint">A PRD at <code>docs/prd/</code>, at the problem stage, linked to and from this thread.</p>
+      <div class="cp-foot"><span class="np-error"></span><button type="button" class="tb" data-role="cancel">Cancel</button><button class="tb primary">Start it</button></div>`;
+    form.ask.value = first;
+    thread.appendChild(form);
+    form.title.focus();
+    $("[data-role=cancel]", form).addEventListener("click", () => form.remove());
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        const r = await api("/api/prd", { title: form.title.value, ask: form.ask.value, source: data.doc, thread: +thread.dataset.thread });
+        location.href = r.href;
+      } catch (err) {
+        let reason = err.message;
+        try { reason = JSON.parse(reason).error || reason; } catch { /* not JSON */ }
+        $(".np-error", form).textContent = reason;
+      }
+    });
+  }
+
+  // Starting a PRD from the index, and setting a PRD's stage from its page
+  $("#new-prd")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    try {
+      const r = await api("/api/prd", { title: form.title.value, ask: form.ask.value });
+      location.href = r.href;
+    } catch (err) {
+      // A refusal is JSON with the reason; anything else is shown as it came
+      let reason = err.message;
+      try { reason = JSON.parse(reason).error || reason; } catch { /* not JSON */ }
+      $(".np-error", form).textContent = reason;
+    }
+  });
+  $("#new-prd [data-role=cancel]")?.addEventListener("click", () => { $("#new-prd").hidden = true; });
+  // r[impl prd.stage-set]
+  document.addEventListener("change", async (e) => {
+    if (e.target.dataset.action !== "stage") return;
+    await api("/api/stage", { path: data.doc, stage: e.target.value });
+    toast(`Stage: ${e.target.value}`);
+    refresh();
+  });
+
   // A note, written into the Markdown: a new question after a block, or added to a thread
-  function composer(after, target, title, chooseKind = false) {
+  function composer(after, target, title, chooseKind = false, { endpoint = "/api/note", text = "" } = {}) {
     $$(".composer").forEach((c) => c.remove());
     const box = document.createElement("form");
     box.className = "composer";
@@ -330,11 +416,13 @@
     if (after.classList.contains("note")) after.appendChild(box);
     else after.insertAdjacentElement(after.classList.contains("thread") ? "beforeend" : "afterend", box);
     const ta = $("textarea", box);
+    ta.value = text;
     ta.focus();
+    ta.select();
     const send = async () => {
       if (!ta.value.trim()) return;
       const kind = $("input[name=kind]:checked", box)?.value;
-      const r = await api("/api/note", { path: data.doc, text: ta.value, ...target, ...(kind ? { kind } : {}) });
+      const r = await api(endpoint, { path: data.doc, text: ta.value, ...target, ...(kind ? { kind } : {}) });
       box.remove();
       toast(`Written${r.author ? ` as @${r.author}` : ""}`);
       refresh();
@@ -349,7 +437,11 @@
 
   // ---- Specs: the requirements in the margin, beside the prose that cites them ---------------
 
-  // A walkthrough's margin of requirements can be put away, and stays as left
+  // A codewalk's margin of requirements can be put away, and stays as left
+  // The margin's state, before anything lays it out
+  let marginRows = []; // [the prose's top, how far below it its cards are], in the document's terms
+  let focusCard = null; // the card you came for, which `followMargin` lines up rather than its group
+  let marginHeld = null; // [a card, the block it's held beside], while it's lined up for you
   function toggleMargin(set) {
     const prose = $("#prose");
     const off = set ?? !prose.classList.contains("no-margin");
@@ -360,21 +452,79 @@
   }
   if (data.margin) toggleMargin(store.get("codewalk-margin") === "off");
 
+  // Each group of cards beside the prose citing it, or below the group before it if that's
+  // in the way. Reading a page, the margin is its own pane, scrolled to follow the prose:
+  // see `followMargin`.
   function layoutMargin() {
     const margin = $("#margin");
     const doc = $(".spec-doc");
     if (!margin || !doc) return;
     const base = doc.getBoundingClientRect().top;
     let floor = 0;
+    marginRows = [];
     for (const g of $$(".mgroup", margin)) {
       const anchor = $(`.spec-doc [data-md="${g.dataset.anchor}"]`);
       const want = anchor ? anchor.getBoundingClientRect().top - base : floor;
       const top = Math.max(want, floor);
       g.style.top = `${top}px`;
       floor = top + g.offsetHeight + 10;
+      if (anchor) marginRows.push([want, top - want + (focusCard && g.contains(focusCard) ? focusCard.offsetTop : 0)]);
     }
     margin.style.minHeight = `${floor}px`;
+    // Room below the last card, so the margin can scroll it up beside prose near the end
+    $(".mspacer", margin)?.remove();
+    if (getComputedStyle(margin).position === "sticky") {
+      const spacer = margin.appendChild(Object.assign(document.createElement("div"), { className: "mspacer" }));
+      Object.assign(spacer.style, { top: `${floor}px`, height: `${innerHeight}px` });
+    }
+    followMargin();
   }
+  // r[impl ui.margin+2]
+  // Scroll the margin so the cards for the prose in the middle of the screen are beside it:
+  // each group lined up with its prose until the next is near, then easing to the next's
+  // offset, so it keeps up as the page scrolls. Scrolled itself, it stays where it's put
+  // until the page scrolls.
+  function followMargin() {
+    const margin = $("#margin");
+    const doc = $(".spec-doc");
+    if (Array.isArray(marginHeld)) return holdMargin(...marginHeld);
+    if (marginHeld || !margin || !doc || !marginRows.length || getComputedStyle(margin).position !== "sticky") return;
+    const d = doc.getBoundingClientRect().top;
+    const reading = ($(".topbar").getBoundingClientRect().bottom + innerHeight) / 2 - d;
+    const EASE = 160;
+    let bias = marginRows[0][1];
+    for (let i = 0; i < marginRows.length; i++) {
+      const [a, b] = marginRows[i];
+      if (reading < a) {
+        if (i > 0) {
+          const [a0, b0] = marginRows[i - 1];
+          const from = Math.max(a0, a - EASE);
+          bias = reading <= from ? b0 : b0 + ((b - b0) * (reading - from)) / Math.max(1, a - from);
+        }
+        break;
+      }
+      bias = b;
+    }
+    margin.scrollTop = margin.getBoundingClientRect().top - d + bias;
+  }
+  // Line one card up with a block of the document, and keep it there until the page scrolls
+  function holdMargin(card, beside) {
+    const margin = $("#margin");
+    if (!margin || !card || !beside || getComputedStyle(margin).position !== "sticky") return;
+    margin.scrollTop += card.getBoundingClientRect().top - beside.getBoundingClientRect().top;
+    marginHeld = [card, beside];
+  }
+  addEventListener("scroll", followMargin, { passive: true });
+  // The page scrolling lets go of a card lined up for you
+  for (const kind of ["wheel", "touchstart", "keydown", "mousedown"]) {
+    addEventListener(kind, () => { marginHeld = null; }, { passive: true, capture: true });
+  }
+  // r[impl ui.margin+2]
+  // The margin isn't scrolled by itself: the wheel over it scrolls the page
+  $("#margin")?.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    scrollBy({ top: e.deltaY, left: 0 });
+  }, { passive: false });
   addEventListener("resize", layoutMargin);
   addEventListener("load", layoutMargin);
   document.fonts?.ready.then(layoutMargin);
@@ -436,16 +586,19 @@
   }
   const startLine = +new URLSearchParams(location.search).get("line") || 0;
   const chosen = new URLSearchParams(location.search).get("req");
+  const chosenCard = data.view === "spec" && chosen ? $(`#margin [data-req-card="${CSS.escape(chosen)}"]`) : null;
+  focusCard = chosenCard;
   layoutMargin();
   if (data.view === "spec" && chosen) {
     // Came for a requirement: light it, and the prose citing it, until you click away
-    const card = $(`#margin [data-req-card="${CSS.escape(chosen)}"]`);
+    const card = chosenCard;
     const anchor = card ? +card.closest(".mgroup").dataset.anchor : 0;
     const prose = startLine ? blockAt(startLine) : anchor ? blockAt(anchor) : null;
     const def = $(`.req-def[data-req-def="${CSS.escape(chosen)}"]`);
     [card, prose, def].forEach((el) => el?.classList.add("chosen"));
     const to = prose || def;
     if (to) { to.scrollIntoView({ block: "center" }); to.classList.add("flash-block"); }
+    if (prose) holdMargin(card, prose);
   } else if (startLine && (data.view === "walk" || data.view === "spec")) {
     const el = blockAt(startLine);
     if (el) { el.scrollIntoView({ block: "start" }); scrollBy(0, -64); }
@@ -458,6 +611,7 @@
     f?.addEventListener("input", () => {
       const q = f.value.trim().toLowerCase();
       $$(".gl-item").forEach((i) => { i.hidden = q && !i.dataset.search.includes(q); });
+      $$(".gl-group").forEach((g) => { g.hidden = !g.querySelector(".gl-item:not([hidden])"); });
     });
     if (location.hash) document.getElementById(location.hash.slice(1))?.classList.add("flash-block");
   }

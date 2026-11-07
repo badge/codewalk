@@ -1,18 +1,17 @@
 # codewalk
 
-Walkthroughs of the code, for people to review it by. A walkthrough is a Markdown file
+Codewalks of the code, for people to review it by. A codewalk is a Markdown file
 that **names** the code it talks about rather than pasting it. codewalk checks every name
 still resolves, shows each one's code as it stands, with its context a click away, and
 remembers what you've reviewed, so it can show you what's changed since.
 
 codewalk is written about in codewalk:
 
-- [codewalk, walked through](docs/walkthrough.md): how it works, from parsing a
-  walkthrough to the page in the browser.
+- [codewalk, walked through](docs/codewalk.md): how it works, from parsing a
+  codewalk to the page in the browser.
 - [Its data model](docs/data_model.md): the things it knows about and how they relate.
 - [Its spec](docs/spec/README.md): what it must do, as prose and the requirements that
-  follow from it.
-- [Its glossary](docs/glossary.md): the words it uses with a meaning of their own.
+  follow from it, with the words each part uses defined beside it.
 
 Every example below names codewalk's own code, and a test checks each one still
 resolves.
@@ -34,30 +33,30 @@ codewalk serve
 ```
 
 Then open <http://localhost:4471>. Everything stays local: the server listens on
-127.0.0.1 only. The only files it writes are walkthroughs and specs, when you save one in
+127.0.0.1 only. The only files it writes are codewalks and specs, when you save one in
 the browser, and `codewalk.review.json`. Ctrl-C stops it.
 
 | Command                               | What it does                                                   |
 | ------------------------------------- | -------------------------------------------------------------- |
 | `codewalk serve [--port 4471]`        | The web view, with editing and live reload                     |
-| `codewalk check [WALKTHROUGH...]`     | Every reference resolves; exits 1 if one doesn't               |
+| `codewalk check [CODEWALK...]`     | Every reference resolves; exits 1 if one doesn't               |
 | `codewalk check --strict`             | The same, and also fails on code changed since it was reviewed |
-| `codewalk export WALKTHROUGH OUT`     | Plain Markdown, with the code written out and linked           |
-| `codewalk review WALKTHROUGH`         | Marks every embedded symbol reviewed as it stands              |
+| `codewalk export CODEWALK OUT`     | Plain Markdown, with the code written out and linked           |
+| `codewalk review CODEWALK`         | Marks every embedded symbol reviewed as it stands              |
 | `codewalk find QUERY`                 | Symbols matching QUERY, with the reference to write            |
 | `codewalk context [--json]`           | What's in hand, for an agent starting a run                    |
 | `codewalk lsp`                        | A language server, for your editor                             |
 | `codewalk init [--dry-run]`           | Set a project up: config, an `AGENTS.md` section, two skills   |
-| `codewalk new PATH --title T [--prd]` | Start a walkthrough, or a PRD                                  |
+| `codewalk new PATH --title T [--prd]` | Start a codewalk, or a PRD                                  |
 
-## Writing a walkthrough
+## Writing a codewalk
 
-Any Markdown file under the docs folders that makes a reference is a walkthrough. Names
+Any Markdown file under the docs folders that makes a reference is a codewalk. Names
 can point into Python or Rust. There are three kinds of reference, and each still reads
 as plain Markdown:
 
 ````markdown
-A walkthrough is parsed into a [[Walk]], and every name in it is checked by
+A codewalk is parsed into a [[Walk]], and every name in it is checked by
 [[Walk::problems]], against [[r:ref.tail]]. A line of a `walk` block is read by
 [an ordinary link](walk:embed_line).
 
@@ -95,7 +94,7 @@ and its type. To pin one down further:
 A name that's ambiguous or names nothing is an error. `check` and the editor list the
 candidates, and the page shows them in place of the code.
 
-**Front matter**, all optional, says what a walkthrough is about. Other keys are left
+**Front matter**, all optional, says what a codewalk is about. Other keys are left
 alone:
 
 ```yaml
@@ -108,8 +107,8 @@ weight: 10   # where it goes in its folder: lighter first, then the rest by titl
 ---
 ```
 
-**Walkthroughs relate** by linking to each other, in the text or in `related`. Either
-end shows the link: what a walkthrough links to, and what links to it.
+**Codewalks relate** by linking to each other, in the text or in `related`. Either
+end shows the link: what a codewalk links to, and what links to it.
 
 **Proposed code.** A change is usually argued for before it's written. Draft it under the
 name it will have:
@@ -118,7 +117,7 @@ name it will have:
 ```walk proposed python
 Library::uses
 def uses(self, ctx: Context, sym: Symbol) -> list[tuple[str, int]]:
-    """The walkthroughs that show or mention `sym`, with the line of each reference."""
+    """The codewalks that show or mention `sym`, with the line of each reference."""
 ```
 ````
 
@@ -127,11 +126,11 @@ broken. Once it's written, the page shows the code with the draft against it, an
 **Settle** turns the block into `walk settled`: the code as written, with the draft kept,
 so **as proposed** shows what was planned against what happened. Inline, `[[?Name]]`.
 
-**A PRD** is a walkthrough with all its code proposed (`codewalk new --prd`): the
+**A PRD** is a codewalk with all its code proposed (`codewalk new --prd`): the
 problem, with the existing code named; the outcome; the spec prose it gives rise to,
 citing the requirements it adds; the code and the tests, drafted with the requirement
 markers they'll carry; and questions. Implementing it settles each proposal in turn, and
-the page and the index show how far it's got. Done, it's a walkthrough of what was
+the page and the index show how far it's got. Done, it's a codewalk of what was
 built, with the plan kept under each excerpt. Its front matter says `kind: prd`.
 
 **Notes** are blockquotes, written under what they're about:
@@ -160,7 +159,8 @@ excerpt of several in a block puts the question directly under it. Notes from th
 are signed with `author` from `codewalk.toml`, or the first word of git's `user.name`.
 
 **Terms and facts** are defined like tracey's requirements, a marker on its own line and
-the text after; tracey ignores them. From [codewalk's glossary](docs/glossary.md):
+the text after, in the spec they belong to. From codewalk's
+[codewalks spec](docs/spec/codewalks.md) and [specs spec](docs/spec/specs.md):
 
 ```markdown
 t[excerpt]
@@ -191,13 +191,13 @@ and lists:
   changed. **They agree** reconciles them, recording both in the review file.
 
 Each requirement shows the code that implements and verifies it, from tracey's markers,
-and the walkthroughs that propose, implement or cite it. That's for finding the code;
+and the codewalks that propose, implement or cite it. That's for finding the code;
 coverage and validation are tracey's. The spec files are the ones tracey's config
 (`.config/tracey/config.styx`) names, and any more in `codewalk.toml`. A requirement is
 `r[id]`, or with a spec's name as its prefix (`codewalk[id]`); codewalk's own
 [spec](docs/spec/README.md) uses `r`.
 
-**Prose, spec and code, side by side.** A walkthrough's margin shows, level with each
+**Prose, spec and code, side by side.** A codewalk's margin shows, level with each
 block, the requirements the block proposes, implements, verifies or cites (from the
 markers in its code, written or drafted, and its citations). Each card leads to its spec,
 at the prose that gave rise to it, which stays lit until you click away. **Requirements**,
@@ -205,10 +205,10 @@ or `m`, puts the margin away.
 
 ## In the browser
 
-- **The index.** Walkthroughs grouped by folder, in order of weight, filtered by tag or
+- **The index.** Codewalks grouped by folder, in order of weight, filtered by tag or
   text (kept in the URL); and the specs, as a tree of their folders.
-- **The walkthrough.** Each excerpt has a caption showing its kind and path, and whether
-  it's been reviewed. Its tags and related walkthroughs are in the sidebar. **Zed** opens
+- **The codewalk.** Each excerpt has a caption showing its kind and path, and whether
+  it's been reviewed. Its tags and related codewalks are in the sidebar. **Zed** opens
   it in Zed. **Copy** copies its name. Click its path or line, or any name in its code,
   to see it in its file.
 - **Its file.** The panel on the right shows the whole file, highlighted, with the symbol
@@ -222,9 +222,10 @@ or `m`, puts the margin away.
   **Done** or Esc goes back to reading at the same place. Type `[[`, or start a line in a
   `walk` block, to complete a name. Problems are listed under the editor: click one to
   go to its line, or click a suggestion to use it. Cmd+S or Ctrl+S saves.
-- **Live.** A page updates when its walkthrough, the code or the review file changes.
+- **Live.** A page updates when its codewalk, the code or the review file changes.
   Edit in your own editor and the page keeps up.
-- **The glossary,** at `/glossary`: every term and fact, where it's defined and used.
+- **The glossary,** at `/glossary`: every term and fact, grouped by the spec that
+  defines it, with where each is used.
 
 ## Reviewing
 
@@ -232,20 +233,20 @@ or `m`, puts the margin away.
 the repository root. Commit that file, so the record travels with the code. When the code
 changes, the badge turns to **changed since review**. Click it to see what changed since
 you reviewed it, then mark it reviewed again. **Mark all reviewed** does the whole
-walkthrough.
+codewalk.
 
 ## For agents
 
-`codewalk context` is what a session should pick up, across walkthroughs and specs:
+`codewalk context` is what a session should pick up, across codewalks and specs:
 standing requests, open questions (with what they're about), proposals not written yet,
 proposals written and waiting to be settled, code changed since review, and broken
 references. `codewalk init` sets a project up for it:
 
 - `codewalk.toml`, if there isn't one;
-- a section in `AGENTS.md`, between markers, saying how walkthroughs, specs and the
+- a section in `AGENTS.md`, between markers, saying how codewalks, specs and the
   glossary work (running init again replaces it);
 - two skills in `.claude/skills/`: `codewalk-propose`, to propose a change as a
-  walkthrough before writing it, and `codewalk-work`, to carry one forward.
+  codewalk before writing it, and `codewalk-work`, to carry one forward.
 
 This repository is set up that way: see its [`AGENTS.md`](AGENTS.md).
 
@@ -291,9 +292,9 @@ Without one, `sources` is `src/**/*.rs`; `specs` and `docs` are as above.
 | `cli.py`          | The commands, with rich-click                                            |
 | `config.py`       | `codewalk.toml`, as a Pydantic model                                     |
 | `code/`           | The code: `index.py` parses Rust with tree-sitter into symbols, each with its span, docs and requirement markers, and resolves names; `python.py` does the same for Python; `highlight.py` highlights a file with Pygments, a line at a time, so any range can be cut out |
-| `walk/`           | Walkthroughs: `doc.py` parses one with markdown-it, checks it and exports it; `notes.py` reads and writes threads; `review.py` keeps the review file; `library.py` puts them all together; `brief.py` is what's in hand, for `codewalk context` |
+| `walk/`           | Codewalks: `doc.py` parses one with markdown-it, checks it and exports it; `notes.py` reads and writes threads; `review.py` keeps the review file; `library.py` puts them all together; `brief.py` is what's in hand, for `codewalk context` |
 | `spec/`           | The spec: `requirements.py` reads them; `tracey.py` reads tracey's config; `prose.py` sets a spec's prose against its requirements (citations, gaps, drift); `trail.py` follows prose to spec to code; `terms.py` is the glossary |
-| `web/`            | The browser: `server.py`, Starlette under uvicorn, with watchfiles and server-sent events for live reload; `render.py`, a walkthrough as HTML, every block tagged with its Markdown line; `templates/` in Jinja; `static/`, plain JS and CSS |
+| `web/`            | The browser: `server.py`, Starlette under uvicorn, with watchfiles and server-sent events for live reload; `render.py`, a codewalk as HTML, every block tagged with its Markdown line; `templates/` in Jinja; `static/`, plain JS and CSS |
 | `lsp.py`          | The language server, on pygls                                            |
 | `setup/`          | `codewalk init`, and the `AGENTS.md` section and skills it writes        |
 

@@ -112,7 +112,7 @@ def test_a_symbol_starts_at_its_doc_comments_and_markers(repo):
     sym, _ = ctx(repo).index.resolve("MARGIN")
     assert (sym.start, sym.line, sym.end) == (3, 5, 5)
     assert sym.doc == "How much to hold back."
-    assert sym.markers == [("impl", "hold.margin")]
+    assert sym.markers == [("impl", "hold.margin", 1)]
 
 
 # r[verify index.languages]
@@ -152,7 +152,7 @@ def test_search_matches_words_in_any_order(repo):
     assert names and names[0].endswith("other::Battery::command")
 
 
-# ---- Walkthroughs -----------------------------------------------------------------------
+# ---- Codewalks -----------------------------------------------------------------------
 
 
 # r[verify ref.forms]
@@ -386,7 +386,7 @@ def test_a_python_symbol_takes_in_its_decorators_comments_and_markers(pyrepo):
     full, _ = index.resolve("Store::full")
     assert (full.start, full.line) == (14, 15)
     store, _ = index.resolve("Store")
-    assert store.start == 6 and store.markers == [("impl", "hold.margin")]
+    assert store.start == 6 and store.markers == [("impl", "hold.margin", 1)]
     assert store.doc == "Keeps things."
 
 
@@ -402,7 +402,7 @@ def test_python_exports_as_a_python_block(pyrepo):
     assert "```python\nLIMIT = 3\n```" in w.export("docs/out.md")
 
 
-# ---- Front matter, and how walkthroughs relate ---------------------------------------------
+# ---- Front matter, and how codewalks relate ---------------------------------------------
 
 
 def test_front_matter_gives_the_title_summary_and_tags(repo):
@@ -439,14 +439,14 @@ def test_front_matter_that_isnt_valid_is_an_error(repo):
     assert problem.severity == "error" and "front matter" in problem.message
 
 
-def test_walkthroughs_relate_by_linking_to_each_other(repo):
+def test_codewalks_relate_by_linking_to_each_other(repo):
     from codewalk.walk.library import Library
 
     (repo / "docs/a.md").write_text("---\ntags: [x, y]\n---\n# A\n\n[[MARGIN]], then [B](b.md#start).\n")
     (repo / "docs/b.md").write_text("---\ntags: [y]\nrelated: [sub/c.md]\n---\n# B\n\n[[MARGIN]]\n")
     (repo / "docs/sub").mkdir()
     (repo / "docs/sub/c.md").write_text("# C\n\n[[MARGIN]]\n")
-    (repo / "docs/plain.md").write_text("# Not a walkthrough\n\n[A](a.md)\n")
+    (repo / "docs/plain.md").write_text("# Not a codewalk\n\n[A](a.md)\n")
     library = Library.of(ctx(repo))
     a, b, c = (library.get(f"docs/{n}") for n in ("a.md", "b.md", "sub/c.md"))
     assert a.links_to == ["docs/b.md"] and a.linked_from == []
@@ -507,7 +507,7 @@ def test_the_pages_render(client):
 
 
 # r[verify serve.local]
-def test_only_walkthroughs_can_be_edited_or_saved(client, repo):
+def test_only_codewalks_can_be_edited_or_saved(client, repo):
     assert client.get("/edit/src/lib.rs").status_code == 403
     assert client.post("/api/save", json={"path": "src/lib.rs", "text": "oops"}).status_code == 403
     assert (repo / "src/lib.rs").read_text() == LIB
@@ -547,11 +547,11 @@ pub fn rest(&mut self) {
 """
 
 
-# r[verify proposal.draft]
+# r[verify proposal.draft+2]
 # r[verify proposal.pending]
 def test_a_proposal_for_a_name_not_written_yet_is_in_hand_not_broken(repo):
     w = walk(repo, PROPOSAL)
-    kinds = sorted((p.severity, p.message) for p in w.problems())
+    kinds = sorted((p.severity, p.message) for p in w.problems() if p.severity != "warning")
     assert kinds == [("pending", "`Battery::rest` is proposed, not written yet")]
     (proposal,) = [r for r in w.refs if r.kind == "proposal"]
     assert proposal.draft.startswith("pub fn rest") and proposal.lang == "rust" and proposal.line == 6
@@ -559,8 +559,38 @@ def test_a_proposal_for_a_name_not_written_yet_is_in_hand_not_broken(repo):
     assert 'class="walk proposal pending"' in body and "proposed-ref" in body
 
 
+# r[verify proposal.agree]
+def test_agreeing_a_proposal_writes_a_decision_under_it_and_context_says_so(client, repo):
+    from codewalk.walk.brief import as_markdown, brief
+
+    (repo / "docs/walk.md").write_text(PROPOSAL + "\nAfter.\n")
+    w = Walk(ctx(repo), "docs/walk.md")
+    assert w.agreement(w.refs[-1]) is None and "not agreed yet" in as_markdown([brief(ctx(repo), "docs/walk.md")])
+    r = client.post("/api/agree", json={"path": "docs/walk.md", "line": 6, "end": 10, "text": "Agreed."})
+    assert r.json()["agreed"] == "Battery::rest"
+    assert "}\n```\n\n> [!decision]" in (repo / "docs/walk.md").read_text()
+    w = Walk(ctx(repo), "docs/walk.md")
+    b = brief(ctx(repo), "docs/walk.md")
+    assert b.proposed[0].agreed.endswith("Agreed.") and ", agreed (" in as_markdown([b])
+    body, _ = render(w)
+    assert 'class="badge agreed"' in body and "Agree again" in body
+    # Agreeing again, or changing it, goes into the same thread
+    client.post("/api/agree", json={"path": "docs/walk.md", "line": 6, "end": 10, "text": "Agreed, but call it `pause`."})
+    w = Walk(ctx(repo), "docs/walk.md")
+    assert len(w.threads) == 1 and [n.kind for n in w.threads[0].notes] == ["decision", "decision"]
+    assert w.agreement(w.refs[-1]).text.startswith("Agreed, but")
+
+
+# r[verify note.add-settled]
+def test_a_settled_thread_can_still_be_answered_or_decided_on(repo):
+    w = walk(repo, "# W\n\n```walk\nMARGIN\n```\n\n> [!question] @m: Why?\n>\n> [!answer] @c: Because.\n")
+    assert w.threads[0].settled
+    body, _ = render(w)
+    assert all(f'data-kind="{k}"' in body for k in ("answer", "question", "decision")) and 'data-mode="changelog"' in body
+
+
 # r[verify proposal.settle]
-# r[verify proposal.progress]
+# r[verify proposal.progress+2]
 def test_once_written_a_proposal_shows_the_code_against_the_draft_and_can_be_settled(repo):
     from codewalk.walk.doc import settle
 
@@ -568,7 +598,7 @@ def test_once_written_a_proposal_shows_the_code_against_the_draft_and_can_be_set
         LIB.replace("impl Battery {", "impl Battery {\n    pub fn rest(&mut self) {\n        self.power = 0;\n    }\n", 1)
     )
     w = walk(repo, PROPOSAL)
-    assert [p.severity for p in w.problems()] == ["pending", "pending"]
+    assert [p.severity for p in w.problems() if p.severity != "warning"] == ["pending", "pending"]
     body, _ = render(w)
     assert 'class="walk proposal written"' in body and 'data-action="settle"' in body
     settled = settle(w.text, 6, "Battery::rest")
@@ -675,7 +705,7 @@ def test_context_briefs_an_agent_on_whats_in_hand(repo):
 # ---- Requirements and their code ------------------------------------------------------------
 
 
-# r[verify spec.traces]
+# r[verify spec.traces+2]
 def test_a_requirements_markers_in_the_code_are_found_with_the_symbol_theyre_on(repo):
     traces = ctx(repo).index.traces()
     (t,) = traces["battery.command"]
@@ -768,7 +798,7 @@ Something we suppose.
 """
 
 
-# r[verify term.define]
+# r[verify term.define+2]
 def test_terms_and_facts_are_defined_like_requirements(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY)
     g = ctx(repo).glossary
@@ -778,8 +808,8 @@ def test_terms_and_facts_are_defined_like_requirements(repo):
     assert g.terms["deadband"].text == "How far above its target import can rise before we act."
 
 
-# r[verify term.cite]
-# r[verify term.errors]
+# r[verify term.cite+2]
+# r[verify term.errors+2]
 def test_terms_are_cited_and_mentioned_and_unknown_ones_are_errors(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY)
     w = walk(repo, "# W\n\nThe deadband, the deadband, and [[t:deadband]] and [[f:market.periods]] and [[t:nope]].\n")
@@ -789,11 +819,41 @@ def test_terms_are_cited_and_mentioned_and_unknown_ones_are_errors(repo):
     assert 'class="term fact"' in body and set(data["terms"]) == {"t:deadband", "f:market.periods"}
 
 
-# r[verify term.errors]
+# r[verify term.cite+2]
+# r[verify note.syntax]
+def test_a_note_whose_kind_is_a_term_is_still_a_note(repo):
+    (repo / "docs/glossary.md").write_text("# G\n\nt[note]\nA paragraph in a blockquote.\n\nt[request]\nA standing ask.\n")
+    w = walk(repo, "# W\n\n> [!note] A thought.\n\nThen:\n\n> [!request] @m: Keep it short.\n")
+    assert [t.notes[0].kind for t in w.threads] == ["note", "request"]
+    body, _ = render(w)
+    assert "A thought." in body and "Keep it short." in body and "[!" not in body
+
+
+# r[verify term.errors+2]
 def test_a_term_defined_twice_is_an_error_where_its_defined(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY + "\nt[deadband]\nAgain.\n")
     w = Walk(ctx(repo), "docs/glossary.md")
     assert any("defined again" in p.message for p in w.problems())
+
+
+# r[verify term.glossary]
+def test_the_glossary_groups_terms_by_the_spec_defining_them(repo):
+    from starlette.testclient import TestClient
+
+    from codewalk.web.server import make_app
+
+    (repo / "docs/spec/spec.md").write_text(SPEC + "\n## Terms\n\nt[deadband]\nHow far import can rise.\n")
+    (repo / "docs/spec/top.md").write_text(
+        "---\nweight: 0\n---\n# Top\n\nt[site]\nA place with a meter.\n\nf[meter.rate] observed\nMeters read every 15 minutes.\n"
+    )
+    (repo / "docs/walk.md").write_text("# Walk\n\nThe deadband at a site, by [[MARGIN]].\n")
+    client = TestClient(make_app(ctx(repo), watch=False))
+    page = client.get("/glossary").text
+    top, spec = page.index('href="/spec/docs/spec/top.md">Top'), page.index('href="/spec/docs/spec/spec.md">')
+    assert top < page.index('id="t-site"') < page.index('id="f-meter-rate"') < spec < page.index('id="t-deadband"')
+    assert 'href="/spec/docs/spec/spec.md#t-deadband"' in page and 'href="/walk/docs/walk.md">docs/walk.md' in page
+    # A term's mention links to its definition, in the spec that defines it
+    assert 'href="/spec/docs/spec/spec.md#t-deadband"' in client.get("/walk/docs/walk.md").text
 
 
 # ---- The language server -------------------------------------------------------------------
@@ -934,7 +994,7 @@ specs (
 
 
 # r[verify spec.files]
-# r[verify spec.prefix]
+# r[verify spec.prefix+2]
 def test_a_spec_named_in_traceys_config_is_read_with_its_own_prefix(repo):
     (repo / ".config/tracey").mkdir(parents=True)
     (repo / ".config/tracey/config.styx").write_text(TRACEY)
@@ -1029,10 +1089,10 @@ def test_a_citation_written_in_backticks_is_an_example_not_a_citation(repo):
 
 
 # r[verify walk.what]
-def test_a_walkthrough_is_markdown_in_the_docs_that_makes_a_reference_and_isnt_spec(repo):
+def test_a_codewalk_is_markdown_in_the_docs_that_makes_a_reference_and_isnt_spec(repo):
     (repo / "docs/plain.md").write_text("# Nothing here\n\nJust words.\n")
     (repo / "docs/walk.md").write_text("# Walk\n\nSee [[MARGIN]].\n")
-    assert ctx(repo).walkthroughs() == ["docs/walk.md"]
+    assert ctx(repo).codewalks() == ["docs/walk.md"]
 
 
 # r[verify spec.trail]
@@ -1048,7 +1108,7 @@ def test_a_blocks_requirements_are_in_the_margin_linked_to_their_prose(repo):
 
 
 # r[verify serve.live]
-def test_a_change_to_a_walkthrough_or_the_code_reaches_the_pages(repo):
+def test_a_change_to_a_codewalk_or_the_code_reaches_the_pages(repo):
     from codewalk.web.server import App
 
     (repo / "docs/walk.md").write_text("# Walk\n\nSee [[MARGIN]].\n")
@@ -1119,7 +1179,7 @@ def test_the_server_stops_on_ctrl_c_with_a_page_open(repo):
 
 
 # r[verify ui.weight]
-def test_walkthroughs_and_specs_are_listed_in_order_of_weight(repo):
+def test_codewalks_and_specs_are_listed_in_order_of_weight(repo):
     from codewalk.walk.library import Library
 
     for name, front in [("b", "weight: 20"), ("a", ""), ("c", "weight: 10"), ("d", "")]:
@@ -1129,3 +1189,274 @@ def test_walkthroughs_and_specs_are_listed_in_order_of_weight(repo):
     [(_, walks)] = lib.folders()
     assert [s.title for s in walks] == ["C", "B", "A", "D"]
     assert [s.rel for _, _, s in lib.spec_tree() if s] == ["docs/spec/first.md", "docs/spec/spec.md"]
+
+
+# ---- PRDs ----------------------------------------------------------------------------------
+
+PRD = """\
+---
+title: "Stop a battery"
+kind: prd
+stage: {stage}
+---
+
+# Stop a battery
+
+r[battery.command+2]
+A battery is told what to do, and for how long.
+
+r[battery.stop]
+A battery can be stopped.
+
+r[hold.margin+2] removed
+
+r[hold.margin]
+Hold a margin back.
+
+t[deadband]
+How far import can rise before we act.
+
+t[site]
+A place with a meter.
+"""
+
+GLOSSARY_DEADBAND = "# G\n\nt[deadband]\nHow far import can rise.\n"
+
+
+def prd(repo: Path, text: str, rel: str = "docs/prd/x.md") -> Walk:
+    (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / rel).write_text(text)
+    return Walk(ctx(repo), rel)
+
+
+# r[verify spec.prefix+2]
+# r[verify spec.traces+2]
+def test_a_versioned_requirement_and_its_traces_are_read_with_their_versions(repo):
+    (repo / "docs/spec/spec.md").write_text(SPEC.replace("r[battery.command]", "r[battery.command+2]"))
+    (repo / "src/lib.rs").write_text(LIB.replace("// r[impl battery.command]", "// r[impl battery.command+2]"))
+    c = ctx(repo)
+    assert c.spec.requirements["battery.command"].version == 2 and c.spec.requirements["hold.margin"].version == 1
+    (trace,) = c.index.traces()["battery.command"]
+    assert trace.version == 2 and trace.symbol.qualified.endswith("Battery::command")
+    sym, _ = c.index.resolve("crate::Battery::command")
+    assert sym.markers == [("impl", "battery.command", 2)]
+
+
+# r[verify prd.requirements]
+# r[verify prd.terms]
+def test_a_prds_requirements_and_terms_are_its_own_not_the_specs(repo):
+    from codewalk.walk.prd import spec_changes
+
+    (repo / "docs/glossary.md").write_text(GLOSSARY_DEADBAND)
+    w = prd(repo, PRD.format(stage="spec"))
+    c = w.ctx
+    assert "battery.stop" not in c.spec.requirements and c.spec.requirements["battery.command"].version == 1
+    assert c.glossary.terms["deadband"].file == "docs/glossary.md" and "site" not in c.glossary.terms
+    assert not c.glossary.duplicates
+    changes = {(ch.kind, ch.id): ch for ch in spec_changes(w)}
+    assert changes[("term", "deadband")].how == "changed" and changes[("term", "deadband")].was == "How far import can rise."
+    assert changes[("term", "site")].how == "new"
+
+
+# r[verify prd.compare]
+def test_a_prds_requirements_are_new_changed_removed_quoted_or_in_error_against_the_spec(repo):
+    from codewalk.walk.prd import spec_changes
+
+    extra = "\nr[battery.command]\nSomething else.\n\nr[nothing.here+2] removed\n"
+    w = prd(repo, PRD.format(stage="spec") + extra)
+    reqs = [(c.id, c.how) for c in spec_changes(w) if c.kind == "requirement"]
+    assert reqs == [
+        ("battery.command", "changed"),
+        ("battery.stop", "new"),
+        ("hold.margin", "removed"),
+        ("hold.margin", "quoted"),
+        ("battery.command", "error"),
+        ("nothing.here", "error"),
+    ]
+    changed = spec_changes(w)[0]
+    assert (changed.version, changed.was) == (2, "A battery is told what to do.")
+    body, _ = render(w)
+    assert body.count("prd-req how-") == 6 and "<del>" in body and "<ins>" in body
+    assert "without a new version" in body and "which the spec doesn&#39;t have" in body
+
+
+# r[verify term.errors+2]
+def test_a_term_a_prd_redefines_or_defines_and_cites_is_not_an_error(repo):
+    (repo / "docs/glossary.md").write_text(GLOSSARY_DEADBAND)
+    w = prd(repo, PRD.format(stage="spec") + "\nA [[t:site]] has a [[t:deadband]].\n")
+    assert not [p.message for p in w.problems() if p.severity == "error"]
+    # Elsewhere, a term only a PRD defines isn't defined
+    other = walk(repo, "# W\n\nA [[t:site]].\n")
+    assert [p.message for p in other.problems()] == ["no term `site`"]
+
+
+# r[verify prd.check]
+def test_check_fails_on_a_prd_that_changes_a_requirement_without_a_new_version(repo, monkeypatch):
+    from click.testing import CliRunner
+
+    from codewalk.cli import main
+
+    monkeypatch.chdir(repo)
+    prd(repo, PRD.format(stage="spec"))
+    assert CliRunner().invoke(main, ["check"]).exit_code == 0
+    prd(repo, PRD.format(stage="spec") + "\nr[battery.command]\nSomething else.\n")
+    out = CliRunner().invoke(main, ["check"])
+    assert out.exit_code == 1 and "without a new version" in out.output and "docs/prd/x.md" in out.output
+
+
+# r[verify prd.stage]
+def test_a_prds_stage_is_read_from_its_front_matter_and_shown(client, repo):
+    from codewalk.walk.brief import as_markdown, brief
+    from codewalk.walk.library import Library
+
+    w = prd(repo, PRD.format(stage="prose"))
+    prd(repo, "---\nkind: prd\n---\n# Y\n\nNothing yet.\n", "docs/prd/y.md")
+    assert w.meta.stage == "prose"
+    lib = Library.of(ctx(repo))
+    assert lib.get("docs/prd/x.md").stage == "prose" and lib.get("docs/prd/y.md").stage == "problem"
+    assert "PRD · prose" in client.get("/").text
+    assert "<option selected>prose</option>" in client.get("/walk/docs/prd/x.md").text
+    assert "at the **prose** stage" in as_markdown([brief(ctx(repo), "docs/prd/x.md")])
+
+
+# r[verify prd.stage-set]
+def test_setting_a_prds_stage_from_its_page_writes_its_front_matter(client, repo):
+    prd(repo, PRD.format(stage="prose"))
+    assert client.post("/api/stage", json={"path": "docs/prd/x.md", "stage": "spec"}).json() == {"stage": "spec"}
+    text = (repo / "docs/prd/x.md").read_text()
+    assert "stage: spec" in text and "stage: prose" not in text and Walk(ctx(repo), "docs/prd/x.md").meta.stage == "spec"
+    assert client.post("/api/stage", json={"path": "docs/prd/x.md", "stage": "done"}).status_code == 409
+    assert client.post("/api/stage", json={"path": "docs/walk.md", "stage": "spec"}).status_code == 409
+
+
+# r[verify prd.stage-gate]
+def test_work_written_ahead_of_a_prds_stage_is_a_warning(repo):
+    proposal = "\n```walk proposed rust\nBattery::stop\npub fn stop(&mut self) {}\n```\n"
+    w = prd(repo, PRD.format(stage="prose") + proposal)
+    warnings = [p.message for p in w.problems() if p.severity == "warning"]
+    assert warnings.count("a requirement at the prose stage") == 4 and "a proposal at the prose stage" in warnings
+    w = prd(repo, PRD.format(stage="spec") + proposal)
+    assert [p.message for p in w.problems() if p.severity == "warning"] == ["a proposal at the spec stage"]
+    w = prd(repo, PRD.format(stage="code") + proposal)
+    assert not [p for p in w.problems() if p.severity == "warning"]
+
+
+# r[verify prd.template]
+def test_a_new_prd_has_a_section_for_each_stage_and_nothing_in_hand(repo, monkeypatch):
+    from click.testing import CliRunner
+
+    from codewalk.cli import main
+
+    monkeypatch.chdir(repo)
+    assert CliRunner().invoke(main, ["new", "docs/prd/x.md", "--title", "X", "--prd"]).exit_code == 0
+    w = Walk(ctx(repo), "docs/prd/x.md")
+    assert (w.meta.kind, w.meta.stage, w.title) == ("prd", "problem", "X")
+    assert all(f"## {s}\n" in w.text for s in ("The problem", "What we want", "The spec", "The code"))
+    assert not w.problems() and not w.threads and w.progress().proposed == 0
+
+
+# r[verify proposal.change]
+def test_a_proposed_change_shows_its_draft_against_the_code_until_settled(repo):
+    from codewalk.walk.doc import settle
+
+    draft = "pub fn command(&mut self, power: i32) -> bool {\n    self.power = power;\n    power == 0\n}"
+    text = f"# W\n\n```walk proposed change rust\ncrate::Battery::command\n{draft}\n```\n"
+    w = walk(repo, text)
+    (ref,) = [r for r in w.refs if r.kind == "proposal"]
+    assert ref.change and ref.symbol and ref.lang == "rust"
+    assert (w.progress().proposed, w.progress().written) == (1, 0)
+    assert [p.message for p in w.problems() if p.severity != "warning"] == [
+        "a change to `crate::Battery::command` is proposed, not settled yet"
+    ]
+    body, _ = render(w)
+    # From the code as it is to the draft: what the change adds is added
+    assert 'class="walk proposal change"' in body
+    assert '<span class="drow add"><span class="dt">+</span>    power == 0</span>' in body
+    assert '<span class="drow del"><span class="dt">-</span>    match power {</span>' in body
+    assert "```walk settled rust\ncrate::Battery::command\n" in settle(w.text, ref.line, "crate::Battery::command")
+    broken = walk(repo, text.replace("crate::Battery::command", "crate::Battery::halt"))
+    assert [p.severity for p in broken.problems() if p.severity != "warning"] == ["error"]
+
+
+# r[verify prd.start]
+def test_starting_a_prd_from_the_index_writes_it_with_what_was_asked(client, repo):
+    r = client.post("/api/prd", json={"title": "Stop a battery!", "ask": "Batteries need stopping."})
+    assert r.json() == {"started": "docs/prd/stop-a-battery.md", "href": "/walk/docs/prd/stop-a-battery.md"}
+    w = Walk(ctx(repo), "docs/prd/stop-a-battery.md")
+    assert (w.meta.kind, w.meta.stage, w.title) == ("prd", "problem", "Stop a battery!")
+    (t,) = w.threads
+    assert t.notes[0].kind == "request" and t.request_open and t.notes[0].text.strip() == "Batteries need stopping."
+    assert client.post("/api/prd", json={"title": "Stop a battery", "ask": "Again."}).status_code == 409
+    assert 'data-action="new-prd"' in client.get("/").text
+
+
+# r[verify prd.template]
+def test_a_comment_in_a_codewalk_isnt_shown(repo):
+    body, _ = render(walk(repo, "# W\n\n<!-- For whoever edits it.\nOn two lines. -->\n\nShown.\n"))
+    assert "whoever" not in body and "Shown." in body
+
+
+# r[verify serve.live]
+def test_pages_link_the_script_and_styles_by_what_is_in_them(client):
+    import re
+
+    page = client.get("/").text
+    js, css = re.search(r'src="(/static/app\.js\?v=[0-9a-f]{10})"', page), re.search(r'href="(/static/app\.css\?v=[0-9a-f]{10})"', page)
+    assert js and css
+    assert client.get(js.group(1)).status_code == 200 and client.get(css.group(1)).status_code == 200
+
+
+# ---- Better codewalks ----------------------------------------------------------------------
+
+
+# r[verify proposal.draft+2]
+def test_a_proposal_in_a_codewalk_that_isnt_a_prd_is_a_warning(repo):
+    warning = "`Battery::rest` is proposed in a codewalk that isn't a PRD: propose it in one"
+    assert [p.message for p in walk(repo, PROPOSAL).problems() if p.severity == "warning"] == [warning]
+    w = prd(repo, "---\nkind: prd\nstage: code\n---\n" + PROPOSAL)
+    assert not [p for p in w.problems() if p.severity == "warning"]
+
+
+# r[verify proposal.progress+2]
+def test_only_a_prd_shows_its_progress(client, repo):
+    (repo / "docs/walk.md").write_text(PROPOSAL)
+    prd(repo, "---\nkind: prd\nstage: code\n---\n" + PROPOSAL)
+    assert "0/1 settled" not in client.get("/walk/docs/walk.md").text
+    assert "PRD proposed: 0/1 settled" in client.get("/walk/docs/prd/x.md").text
+    assert client.get("/").text.count('<div class="progress"') == 1
+
+
+# r[verify prd.from-thread]
+def test_a_prd_started_from_a_thread_and_the_thread_link_to_each_other(client, repo):
+    (repo / "docs/walk.md").write_text("# Walk\n\n```walk\nMARGIN\n```\n\n> [!question] @m: Why hold back so much?\n")
+    (thread,) = Walk(ctx(repo), "docs/walk.md").threads
+    assert 'data-action="prd-from-thread"' in client.get("/walk/docs/walk.md").text
+    r = client.post("/api/prd", json={"title": "Hold less", "ask": "Hold back less.", "source": "docs/walk.md", "thread": thread.line})
+    assert r.json() == {"started": "docs/prd/hold-less.md", "href": "/walk/docs/prd/hold-less.md"}
+    request = Walk(ctx(repo), "docs/prd/hold-less.md").threads[0].notes[0]
+    assert request.kind == "request" and request.text.strip().endswith("From [Walk](../walk.md).")
+    (thread,) = Walk(ctx(repo), "docs/walk.md").threads
+    assert [(n.kind, n.text.strip()) for n in thread.all()][-1] == ("note", "Taken up in a PRD: [Hold less](prd/hold-less.md).")
+    # A PRD's own threads don't offer it
+    assert 'data-action="prd-from-thread"' not in client.get("/walk/docs/prd/hold-less.md").text
+    bad = client.post("/api/prd", json={"title": "Other", "ask": "x", "source": "docs/walk.md", "thread": 1})
+    assert bad.status_code == 409 and not (repo / "docs/prd/other.md").exists()
+
+
+# r[verify term.define+2]
+# r[verify term.cite+2]
+def test_a_cited_only_term_is_linked_only_where_its_cited(repo):
+    (repo / "docs/glossary.md").write_text("# G\n\nt[target] cited-only\nWhat a site aims for.\n\nf[odd] cited-only\nNot a fact.\n")
+    g = ctx(repo).glossary
+    assert g.terms["target"].cited_only and "odd" not in g.facts
+    w = walk(repo, "# W\n\nThe target moves, and a [[t:target]] is set.\n")
+    body, data = render(w)
+    assert 'class="mention"' not in body and "t:target" in data["terms"] and not w.problems()
+
+
+# r[verify ui.edit-margin]
+def test_the_editor_can_put_the_margin_away(client, repo):
+    page = client.get("/edit/docs/spec/spec.md").text
+    assert 'id="margin-toggle"' in page and '"margin": true' in page
+    css = client.get("/static/app.css").text
+    assert ".editor.with-context .preview .prose.spec .margin { display: none; }" in css

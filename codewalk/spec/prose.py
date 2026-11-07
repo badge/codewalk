@@ -32,7 +32,7 @@ from codewalk.spec import tracey
 from codewalk.spec.requirements import Requirement, SpecIndex
 from codewalk.walk.doc import WIKI, Context, Walk
 
-REQ_LINE = re.compile(rf"^[a-z][a-z0-9]*\[{tracey.ID}\]")
+REQ_LINE = re.compile(rf"^[a-z][a-z0-9]*\[{tracey.ID}{tracey.VERSION}\]")
 CITE_CODE = re.compile(r"`([a-z0-9][a-z0-9.\-]*\.[a-z0-9.\-]+)`")
 CITE_LINK = re.compile(rf"\]\(req:({tracey.QUALIFIED})\)")
 
