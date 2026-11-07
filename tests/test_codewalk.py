@@ -547,11 +547,11 @@ pub fn rest(&mut self) {
 """
 
 
-# r[verify proposal.draft]
+# r[verify proposal.draft+2]
 # r[verify proposal.pending]
 def test_a_proposal_for_a_name_not_written_yet_is_in_hand_not_broken(repo):
     w = walk(repo, PROPOSAL)
-    kinds = sorted((p.severity, p.message) for p in w.problems())
+    kinds = sorted((p.severity, p.message) for p in w.problems() if p.severity != "warning")
     assert kinds == [("pending", "`Battery::rest` is proposed, not written yet")]
     (proposal,) = [r for r in w.refs if r.kind == "proposal"]
     assert proposal.draft.startswith("pub fn rest") and proposal.lang == "rust" and proposal.line == 6
@@ -590,7 +590,7 @@ def test_a_settled_thread_can_still_be_answered_or_decided_on(repo):
 
 
 # r[verify proposal.settle]
-# r[verify proposal.progress]
+# r[verify proposal.progress+2]
 def test_once_written_a_proposal_shows_the_code_against_the_draft_and_can_be_settled(repo):
     from codewalk.walk.doc import settle
 
@@ -598,7 +598,7 @@ def test_once_written_a_proposal_shows_the_code_against_the_draft_and_can_be_set
         LIB.replace("impl Battery {", "impl Battery {\n    pub fn rest(&mut self) {\n        self.power = 0;\n    }\n", 1)
     )
     w = walk(repo, PROPOSAL)
-    assert [p.severity for p in w.problems()] == ["pending", "pending"]
+    assert [p.severity for p in w.problems() if p.severity != "warning"] == ["pending", "pending"]
     body, _ = render(w)
     assert 'class="walk proposal written"' in body and 'data-action="settle"' in body
     settled = settle(w.text, 6, "Battery::rest")
@@ -798,7 +798,7 @@ Something we suppose.
 """
 
 
-# r[verify term.define]
+# r[verify term.define+2]
 def test_terms_and_facts_are_defined_like_requirements(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY)
     g = ctx(repo).glossary
@@ -808,7 +808,7 @@ def test_terms_and_facts_are_defined_like_requirements(repo):
     assert g.terms["deadband"].text == "How far above its target import can rise before we act."
 
 
-# r[verify term.cite]
+# r[verify term.cite+2]
 # r[verify term.errors+2]
 def test_terms_are_cited_and_mentioned_and_unknown_ones_are_errors(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY)
@@ -819,7 +819,7 @@ def test_terms_are_cited_and_mentioned_and_unknown_ones_are_errors(repo):
     assert 'class="term fact"' in body and set(data["terms"]) == {"t:deadband", "f:market.periods"}
 
 
-# r[verify term.cite]
+# r[verify term.cite+2]
 # r[verify note.syntax]
 def test_a_note_whose_kind_is_a_term_is_still_a_note(repo):
     (repo / "docs/glossary.md").write_text("# G\n\nt[note]\nA paragraph in a blockquote.\n\nt[request]\nA standing ask.\n")
@@ -1365,7 +1365,9 @@ def test_a_proposed_change_shows_its_draft_against_the_code_until_settled(repo):
     (ref,) = [r for r in w.refs if r.kind == "proposal"]
     assert ref.change and ref.symbol and ref.lang == "rust"
     assert (w.progress().proposed, w.progress().written) == (1, 0)
-    assert [p.message for p in w.problems()] == ["a change to `crate::Battery::command` is proposed, not settled yet"]
+    assert [p.message for p in w.problems() if p.severity != "warning"] == [
+        "a change to `crate::Battery::command` is proposed, not settled yet"
+    ]
     body, _ = render(w)
     # From the code as it is to the draft: what the change adds is added
     assert 'class="walk proposal change"' in body
@@ -1373,7 +1375,7 @@ def test_a_proposed_change_shows_its_draft_against_the_code_until_settled(repo):
     assert '<span class="drow del"><span class="dt">-</span>    match power {</span>' in body
     assert "```walk settled rust\ncrate::Battery::command\n" in settle(w.text, ref.line, "crate::Battery::command")
     broken = walk(repo, text.replace("crate::Battery::command", "crate::Battery::halt"))
-    assert [p.severity for p in broken.problems()] == ["error"]
+    assert [p.severity for p in broken.problems() if p.severity != "warning"] == ["error"]
 
 
 # r[verify prd.start]
@@ -1402,3 +1404,59 @@ def test_pages_link_the_script_and_styles_by_what_is_in_them(client):
     js, css = re.search(r'src="(/static/app\.js\?v=[0-9a-f]{10})"', page), re.search(r'href="(/static/app\.css\?v=[0-9a-f]{10})"', page)
     assert js and css
     assert client.get(js.group(1)).status_code == 200 and client.get(css.group(1)).status_code == 200
+
+
+# ---- Better codewalks ----------------------------------------------------------------------
+
+
+# r[verify proposal.draft+2]
+def test_a_proposal_in_a_codewalk_that_isnt_a_prd_is_a_warning(repo):
+    warning = "`Battery::rest` is proposed in a codewalk that isn't a PRD: propose it in one"
+    assert [p.message for p in walk(repo, PROPOSAL).problems() if p.severity == "warning"] == [warning]
+    w = prd(repo, "---\nkind: prd\nstage: code\n---\n" + PROPOSAL)
+    assert not [p for p in w.problems() if p.severity == "warning"]
+
+
+# r[verify proposal.progress+2]
+def test_only_a_prd_shows_its_progress(client, repo):
+    (repo / "docs/walk.md").write_text(PROPOSAL)
+    prd(repo, "---\nkind: prd\nstage: code\n---\n" + PROPOSAL)
+    assert "0/1 settled" not in client.get("/walk/docs/walk.md").text
+    assert "PRD proposed: 0/1 settled" in client.get("/walk/docs/prd/x.md").text
+    assert client.get("/").text.count('<div class="progress"') == 1
+
+
+# r[verify prd.from-thread]
+def test_a_prd_started_from_a_thread_and_the_thread_link_to_each_other(client, repo):
+    (repo / "docs/walk.md").write_text("# Walk\n\n```walk\nMARGIN\n```\n\n> [!question] @m: Why hold back so much?\n")
+    (thread,) = Walk(ctx(repo), "docs/walk.md").threads
+    assert 'data-action="prd-from-thread"' in client.get("/walk/docs/walk.md").text
+    r = client.post("/api/prd", json={"title": "Hold less", "ask": "Hold back less.", "source": "docs/walk.md", "thread": thread.line})
+    assert r.json() == {"started": "docs/prd/hold-less.md", "href": "/walk/docs/prd/hold-less.md"}
+    request = Walk(ctx(repo), "docs/prd/hold-less.md").threads[0].notes[0]
+    assert request.kind == "request" and request.text.strip().endswith("From [Walk](../walk.md).")
+    (thread,) = Walk(ctx(repo), "docs/walk.md").threads
+    assert [(n.kind, n.text.strip()) for n in thread.all()][-1] == ("note", "Taken up in a PRD: [Hold less](prd/hold-less.md).")
+    # A PRD's own threads don't offer it
+    assert 'data-action="prd-from-thread"' not in client.get("/walk/docs/prd/hold-less.md").text
+    bad = client.post("/api/prd", json={"title": "Other", "ask": "x", "source": "docs/walk.md", "thread": 1})
+    assert bad.status_code == 409 and not (repo / "docs/prd/other.md").exists()
+
+
+# r[verify term.define+2]
+# r[verify term.cite+2]
+def test_a_cited_only_term_is_linked_only_where_its_cited(repo):
+    (repo / "docs/glossary.md").write_text("# G\n\nt[target] cited-only\nWhat a site aims for.\n\nf[odd] cited-only\nNot a fact.\n")
+    g = ctx(repo).glossary
+    assert g.terms["target"].cited_only and "odd" not in g.facts
+    w = walk(repo, "# W\n\nThe target moves, and a [[t:target]] is set.\n")
+    body, data = render(w)
+    assert 'class="mention"' not in body and "t:target" in data["terms"] and not w.problems()
+
+
+# r[verify ui.edit-margin]
+def test_the_editor_can_put_the_margin_away(client, repo):
+    page = client.get("/edit/docs/spec/spec.md").text
+    assert 'id="margin-toggle"' in page and '"margin": true' in page
+    css = client.get("/static/app.css").text
+    assert ".editor.with-context .preview .prose.spec .margin { display: none; }" in css

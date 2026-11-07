@@ -46,6 +46,7 @@ class Summary(BaseModel):
     written: int = 0
     settled: int = 0
 
+    # r[impl proposal.progress+2]
     @property
     def plan(self) -> int:
         return self.proposed + self.written + self.settled

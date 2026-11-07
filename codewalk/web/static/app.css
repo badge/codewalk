@@ -381,7 +381,7 @@ a.req.cite code { background: var(--ok-soft) !important; color: var(--ok); }
 /* Reading, the margin is a pane of its own beside the document, scrolled to follow it */
 .layout .prose.spec > .margin {
   position: sticky; top: 48px; align-self: start; height: calc(100vh - 48px); min-height: 0 !important;
-  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin;
+  overflow: hidden;
 }
 .layout .prose.spec > .margin .mgroup { left: 3px; right: 3px; }
 .mspacer { position: absolute; left: 0; width: 1px; pointer-events: none; }
@@ -525,3 +525,9 @@ pre.diff.plan { border-top: 1px dashed var(--ok); }
 .new-prd .hint { margin: 0; font-size: 12.5px; color: var(--muted); }
 .new-prd .np-error { margin-right: auto; color: var(--err); font-size: 13px; }
 .pill.stage select { margin-left: 4px; font: inherit; color: inherit; background: transparent; border: 0; cursor: pointer; }
+
+/* With a file open beside the editor, the preview's margin steps aside, as it does reading */
+.editor.with-context .preview .prose.spec { grid-template-columns: minmax(0, 1fr); }
+.editor.with-context .preview .prose.spec .margin { display: none; }
+/* Starting a PRD from a thread */
+.thread .new-prd { margin: 8px 12px 12px; max-width: none; }

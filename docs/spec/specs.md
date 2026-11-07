@@ -38,12 +38,13 @@ comes from (`spec.trail`).
 ### Terms and facts
 
 A word with a meaning of its own here is a term, `t[word]`, and something relied on about
-the world is a fact, `f[id]`, with how it's known: documented, observed or assumed
-(`term.define`). Each is defined in the spec it belongs to, under its own heading before
+the world is a fact, `f[id]`, with how it's known: documented, observed or assumed. A term
+whose word is often used in its ordinary sense is defined as cited only,
+`t[word] cited-only` (`term.define`). Each is defined in the spec it belongs to, under its own heading before
 the requirements, so a spec reads complete on its own; those that run through all of
 codewalk are in its top-level spec. They're cited like requirements, and a term is also
-found wherever its words appear in prose, and linked to where it's defined
-(`term.cite`). One defined twice in the spec, or cited and not defined, is an error; a
+found wherever its words appear in prose, and linked to where it's defined, unless it's
+cited only, when it's linked only where it's cited (`term.cite`). One defined twice in the spec, or cited and not defined, is an error; a
 [[t:prd]] defining one is proposing it, not defining it twice (`term.errors`).
 The glossary collects them all, by the spec that defines each, with where each is used
 (`term.glossary`).
@@ -137,15 +138,15 @@ A codewalk's margin MUST show, beside each block, the requirements it proposes,
 implements, verifies or cites, and each MUST link to its spec at the prose that cites it,
 or at the requirement if no prose does.
 
-r[term.define]
-A line consisting only of `t[id]` or `f[id]`, optionally followed by documented,
-observed or assumed, MUST be read as the definition of a term or fact, with the paragraph
-after it as its text.
+r[term.define+2]
+A line consisting only of `t[id]` or `f[id]`, optionally followed, for a fact, by
+documented, observed or assumed, or, for a term, by `cited-only`, MUST be read as the
+definition of a term or fact, with the paragraph after it as its text.
 
-r[term.cite]
+r[term.cite+2]
 `[[t:id]]`, `[[f:id]]`, and links with the `term:` and `fact:` schemes MUST be read as
 citations, and a term's words in prose SHOULD be linked to it the first time in each
-paragraph.
+paragraph, unless it's defined `cited-only`, when it MUST be linked only where it's cited.
 
 r[term.errors+2]
 A term or fact defined more than once in the spec, or cited and defined neither in the

@@ -52,7 +52,7 @@
           {% if s.broken %}<span class="pill err">{{ s.broken }} broken</span>{% else %}<span class="pill ok">all resolve</span>{% endif %}
           {% if s.changed %}<span class="pill warn">{{ s.changed }} changed</span>{% endif %}
         </div>
-        {% if s.plan %}
+        {% if s.plan and s.kind == "prd" %}
         <div class="progress" title="{{ s.settled }} settled, {{ s.written }} written and waiting, {{ s.proposed }} not written yet">
           <span class="meter"><span style="width:{{ (100 * s.settled / s.plan) | round | int }}%"></span></span>
           {{ s.plan_status }}: {{ s.settled }} of {{ s.plan }} settled{% if s.written %}, {{ s.written }} to settle{% endif %}

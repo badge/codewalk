@@ -18,6 +18,8 @@ related: ["authoring-prds.md", "../codewalk.md"]
 > - Sometimes a general term (in another project, `target`) gets rendered as its term, even though its not; do we need a marker to make the UI _not_ show it as a term?
 >
 > I should say that this is all pretty vanilla/UI stuff, and I'm not concerned about this being the most thoroughly reviewed PRD in the world.
+>
+> [!done] @claude: All of it, as this PRD says: a codewalk explains and a PRD proposes, with a thread able to start a PRD; the `proposed: 0/1 settled` was the `Library::uses` proposal, now a PRD of its own; the editor's Requirements toggle; a margin that passes the wheel to the page; opening and closing code keeping your place; terms defined `cited-only`; and "walkthrough" is "codewalk" everywhere but the PRDs.
 
 ## The problem
 
@@ -148,6 +150,26 @@ else the block at the top of the window, at the same height in the window.
 
 ## The code
 
+> [!note] @claude: As built, every block below is settled. Where the code departs from
+> the outline:
+>
+> - **The rename** was one commit of its own, before the rest. Reviewed excerpts whose
+>   code it renamed show as changed since review, since they did change.
+> - **`App::start_prd`** checks the thread is there before starting the PRD, so a bad one
+>   writes nothing, and refuses it with a 409, like the other refusals.
+> - **`cited-only` on a fact** isn't read as a definition at all, since only a term can be
+>   cited only.
+> - **Older proposal tests** put a proposal in a codewalk that isn't a PRD, so they ignore
+>   the warning that now brings, and a new test checks it.
+> - **Keeping your place** remembers the block whose name was clicked until the next click
+>   in the page or a scroll, so closing the file keeps the same block still, not just the
+>   one at the top of the window. Checked in a browser: the block stays to the pixel,
+>   opening and closing.
+> - **The editor** gets the toggle for a spec file too, which said it had no margin.
+> - **`Library::uses`** moved to a PRD of its own,
+>   [From the code back to codewalks](from-the-code-back-to-codewalks.md), at the prose
+>   stage, with what its thread decided.
+
 ### The word
 
 A rename, done as one change before the rest: "walkthrough" for "codewalk" in every file
@@ -167,7 +189,7 @@ A thread in a codewalk that isn't a PRD has a **Start a PRD** button, which open
 form as the index, with what's asked filled in from the thread's first note. Starting it
 goes to the server with where it came from, which links the two:
 
-```walk proposed change python
+```walk settled python
 App::start_prd
 # r[impl prd.start]
 # r[impl prd.from-thread]
@@ -196,7 +218,7 @@ def start_prd(self, title: str, ask: str, source: str | None = None, thread: int
 
 A definition says whether its term is cited only:
 
-```walk proposed change python
+```walk settled python
 Definition
 class Definition(BaseModel):
     kind: Literal["term", "fact"]
@@ -216,7 +238,7 @@ class Definition(BaseModel):
         return self.id.replace("-", " ")
 ```
 
-```walk proposed change python
+```walk settled python
 DEF_LINE
 DEF_LINE = re.compile(r"^(t|f)\[([a-z0-9][a-z0-9.\-]*)\](?:[ \t]+(documented|observed|assumed|cited-only))?[ \t]*$")
 ```
@@ -224,7 +246,7 @@ DEF_LINE = re.compile(r"^(t|f)\[([a-z0-9][a-z0-9.\-]*)\](?:[ \t]+(documented|obs
 `terms::parse` reads `cited-only` for a term only, and the pattern that finds a term's
 words in prose leaves cited-only terms out:
 
-```walk proposed change python
+```walk settled python
 Glossary::mentions
 def mentions(self) -> re.Pattern | None:
     """A pattern for every term as it's written in prose, but those cited only.
@@ -256,32 +278,32 @@ browser, not by the tests.
 
 ### Tests
 
-```walk proposed python
+```walk settled python
 test_a_proposal_in_a_codewalk_that_isnt_a_prd_is_a_warning
 # r[verify proposal.draft+2]
 def test_a_proposal_in_a_codewalk_that_isnt_a_prd_is_a_warning(repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_only_a_prd_shows_its_progress
 # r[verify proposal.progress+2]
 def test_only_a_prd_shows_its_progress(client, repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_a_prd_started_from_a_thread_and_the_thread_link_to_each_other
 # r[verify prd.from-thread]
 def test_a_prd_started_from_a_thread_and_the_thread_link_to_each_other(client, repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_a_cited_only_term_is_linked_only_where_its_cited
 # r[verify term.define+2]
 # r[verify term.cite+2]
 def test_a_cited_only_term_is_linked_only_where_its_cited(repo): ...
 ```
 
-```walk proposed python
+```walk settled python
 test_the_editor_can_put_the_margin_away
 # r[verify ui.edit-margin]
 def test_the_editor_can_put_the_margin_away(client, repo): ...
@@ -298,11 +320,22 @@ codewalk has called a walkthrough.)
 
 ## Questions
 
+> [!question] @claude: The rename showed a gap in how a PRD is checked. Once a PRD's work
+> is done, its requirements are quoted from the spec, and any later change to one of them
+> makes `codewalk check` fail on the finished PRD: *Authoring PRDs* did, over a word, until
+> I brought its copy into line. A finished PRD is a record, so I'd stop comparing its spec
+> with the spec once it's at the work stage and its proposals are all settled, and show it
+> as it was. Should a finished PRD be marked as such (a stage after the work, `done`, say),
+> or is "at the work stage, all settled" enough?
 
 ## Changelog
 
 What was asked here and how it was settled, newest first.
 
+- 2026-11-07 (the work): The prose and requirements moved into the spec, "walkthrough"
+  renamed "codewalk" everywhere but the PRDs, the code and its tests written, and every
+  proposal settled, with where the code departs from its outline in a note under
+  [The code](#the-code). Set to `stage: work`.
 - 2026-11-07 (to the code): **question** @claude: Is the spec broadly agreed? → @matthew,
   in conversation: Yes, and go on to the work too. Set `stage: code`, with the outline in
   [The code](#the-code).

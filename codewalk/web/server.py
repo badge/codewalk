@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import re
 import threading
 from contextlib import asynccontextmanager
@@ -251,11 +252,12 @@ class App:
         self.writable(rel)
         return {"reconciled": prose.reconcile(self.ctx, rel, rid)}
 
+    # r[impl ui.edit-margin]
     def edit_page(self, rel: str) -> str:
         self.writable(rel)
         if self.is_spec(rel):
             body, data, _, w = self.spec_body(rel)
-            data.update({"doc": rel, "spec": True, "problems": []})
+            data.update({"doc": rel, "spec": True, "problems": [], "margin": True})
             return self.page("edit.html", f"Editing {w.title}", "edit", data, rel=rel, body=body, text=w.text, spec=True)
         body, data, w = self.walk_body(rel)
         data.update({"doc": rel, "problems": [p.model_dump() for p in w.problems()]})
@@ -537,13 +539,51 @@ class App:
         return {"stage": stage}
 
     # r[impl prd.start]
+    # r[impl prd.from-thread]
     # r[impl serve.local]
-    def start_prd(self, title: str, ask: str) -> dict:
-        """Start a PRD from the index, and say where to open it."""
+    def start_prd(self, title: str, ask: str, source: str | None = None, thread: int | None = None) -> dict:
+        """Start a PRD from the index, or from a thread in a codewalk, and say where to open it.
+
+        From a thread, the PRD's request says which codewalk it came from, and a note added
+        to the thread says where the PRD is.
+
+        Parameters
+        ----------
+        title : str
+            The PRD's title.
+        ask : str
+            What the person wants, in their own words.
+        source : str or None
+            The codewalk the thread is in, from the root, if it's started from one.
+        thread : int or None
+            The line the thread starts on.
+
+        Returns
+        -------
+        dict
+            `started`, the PRD's path, and `href`, where to open it.
+
+        Raises
+        ------
+        ValueError
+            If there's a PRD by that name already, or the thread isn't there.
+        """
+        origin = None
+        if source and thread:
+            w = Walk(self.ctx, source)
+            found = next((t for t in w.threads if t.line == thread), None)
+            if found is None:
+                raise ValueError(f"no thread on line {thread} of {source}")
+            origin = (self.writable(source), found)
+            ask = f"{ask.rstrip()}\n\nFrom [{w.title}]({os.path.relpath(source, prd.FOLDER)})."
         try:
             rel = prd.start(self.ctx, title, ask)
         except FileExistsError as e:
             raise ValueError(f"there's a PRD at {e} already") from e
+        if origin:
+            path, found = origin
+            note = f"Taken up in a PRD: [{title}]({os.path.relpath(rel, os.path.dirname(source))})."
+            path.write_text(notes.reply(path.read_text(), found, "note", self.ctx.config.who(self.ctx.root), note))
         return {"started": rel, "href": f"/walk/{rel}"}
 
     # r[impl review.people]
@@ -696,7 +736,7 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
 
     async def start_prd(request: Request):
         b = await request.json()
-        return JSONResponse(await threaded(app.start_prd, b["title"], b["ask"]))
+        return JSONResponse(await threaded(app.start_prd, b["title"], b["ask"], b.get("source"), b.get("thread")))
 
     async def agree(request: Request):
         b = await request.json()

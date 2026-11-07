@@ -107,13 +107,35 @@
   const NAME = /^(n|nf|nc|nn|nx|nd|ne|fm)$/;
 
   // r[impl ui.context]
+  // r[impl ui.context-place]
+  // What you were reading, and where it was in the window: the block whose name was
+  // clicked, else the one at the top of the window
+  let clicked = null;
+  document.addEventListener("click", (e) => { clicked = e.target.closest?.("#prose [data-md]") || clicked; }, true);
+  // Scrolling to read elsewhere means the block clicked last isn't what's being read
+  addEventListener("wheel", () => { clicked = null; }, { passive: true });
+  function readingPlace() {
+    const top = $(".topbar").getBoundingClientRect().bottom;
+    const inView = (el) => el && el.getBoundingClientRect().bottom > top && el.getBoundingClientRect().top < innerHeight;
+    const el = inView(clicked) ? clicked : $$("#prose [data-md]").find((b) => b.getBoundingClientRect().bottom > top + 4);
+    return el ? [el, el.getBoundingClientRect().top] : null;
+  }
+  // Put it back where it was, once the layout has changed around it
+  function keepPlace(place) {
+    if (!place) return;
+    const [el, was] = place;
+    scrollBy({ top: el.getBoundingClientRect().top - was, left: 0 });
+    layoutMargin();
+  }
   async function openContext({ file, start, end, line, focusRef }) {
     if (!panel) return;
     hideCard();
     const view = await api(`/api/file?path=${encodeURIComponent(file)}`);
     panelFile = view;
+    const place = panel.hidden && data.view !== "edit" ? readingPlace() : null;
     panel.hidden = false;
     panel.parentElement.classList.add("with-context");
+    keepPlace(place);
     const rows = view.lines
       .map((l, i) => `<span class="row" data-line="${i + 1}"><span class="ln">${i + 1}</span><span class="lc">${l || " "}</span></span>`)
       .join("");
@@ -167,8 +189,10 @@
   }
   function closeContext() {
     if (!panel) return;
+    const place = data.view !== "edit" ? readingPlace() : null;
     panel.hidden = true;
     panel.parentElement.classList.remove("with-context");
+    keepPlace(place);
   }
   function contextFor(ref) {
     const s = data.symbols?.[ref];
@@ -306,6 +330,9 @@
     } else if (action === "agree" && fig) {
       // r[impl proposal.agree]
       composer(fig, { line: +fig.dataset.md, end: +fig.dataset.mdEnd }, `Agree ${fig.dataset.ref}`, false, { endpoint: "/api/agree", text: "Agreed: write it as proposed." });
+    } else if (action === "prd-from-thread") {
+      // r[impl prd.from-thread]
+      prdFromThread(btn.closest(".thread"));
     } else if (action === "new-prd") {
       // r[impl prd.start]
       const form = $("#new-prd");
@@ -325,6 +352,34 @@
       refresh();
     }
   });
+
+  // Starting a PRD from a thread: the same as from the index, filled in from the thread,
+  // and the thread is given a note saying where the PRD is
+  function prdFromThread(thread) {
+    $$(".thread .new-prd").forEach((f) => f.remove());
+    const first = $(".note-body", thread)?.innerText.trim() || "";
+    const form = document.createElement("form");
+    form.className = "new-prd";
+    form.innerHTML = `<label>Title <input name="title" required autocomplete="off" placeholder="What the change is, in a few words"></label>
+      <label>What you want <textarea name="ask" rows="4" required></textarea></label>
+      <p class="hint">A PRD at <code>docs/prd/</code>, at the problem stage, linked to and from this thread.</p>
+      <div class="cp-foot"><span class="np-error"></span><button type="button" class="tb" data-role="cancel">Cancel</button><button class="tb primary">Start it</button></div>`;
+    form.ask.value = first;
+    thread.appendChild(form);
+    form.title.focus();
+    $("[data-role=cancel]", form).addEventListener("click", () => form.remove());
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        const r = await api("/api/prd", { title: form.title.value, ask: form.ask.value, source: data.doc, thread: +thread.dataset.thread });
+        location.href = r.href;
+      } catch (err) {
+        let reason = err.message;
+        try { reason = JSON.parse(reason).error || reason; } catch { /* not JSON */ }
+        $(".np-error", form).textContent = reason;
+      }
+    });
+  }
 
   // Starting a PRD from the index, and setting a PRD's stage from its page
   $("#new-prd")?.addEventListener("submit", async (e) => {
@@ -386,7 +441,7 @@
   // The margin's state, before anything lays it out
   let marginRows = []; // [the prose's top, how far below it its cards are], in the document's terms
   let focusCard = null; // the card you came for, which `followMargin` lines up rather than its group
-  let marginHeld = null; // [a card, the block it's held beside], or true once scrolled by hand
+  let marginHeld = null; // [a card, the block it's held beside], while it's lined up for you
   function toggleMargin(set) {
     const prose = $("#prose");
     const off = set ?? !prose.classList.contains("no-margin");
@@ -424,7 +479,7 @@
     }
     followMargin();
   }
-  // r[impl ui.margin]
+  // r[impl ui.margin+2]
   // Scroll the margin so the cards for the prose in the middle of the screen are beside it:
   // each group lined up with its prose until the next is near, then easing to the next's
   // offset, so it keeps up as the page scrolls. Scrolled itself, it stays where it's put
@@ -460,9 +515,16 @@
     marginHeld = [card, beside];
   }
   addEventListener("scroll", followMargin, { passive: true });
+  // The page scrolling lets go of a card lined up for you
   for (const kind of ["wheel", "touchstart", "keydown", "mousedown"]) {
-    addEventListener(kind, (e) => { marginHeld = e.target.closest?.("#margin") ? true : null; }, { passive: true, capture: true });
+    addEventListener(kind, () => { marginHeld = null; }, { passive: true, capture: true });
   }
+  // r[impl ui.margin+2]
+  // The margin isn't scrolled by itself: the wheel over it scrolls the page
+  $("#margin")?.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    scrollBy({ top: e.deltaY, left: 0 });
+  }, { passive: false });
   addEventListener("resize", layoutMargin);
   addEventListener("load", layoutMargin);
   document.fonts?.ready.then(layoutMargin);

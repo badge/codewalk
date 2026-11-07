@@ -347,7 +347,7 @@ class Walk:
             self.links.append(target)
 
     # r[impl ref.forms]
-    # r[impl term.cite]
+    # r[impl term.cite+2]
     def _collect(self) -> None:
         for tok in self.tokens:
             if tok.type == "front_matter":
@@ -385,7 +385,7 @@ class Walk:
         for rel in self.meta.related:
             self._link(rel)
 
-    # r[impl proposal.draft]
+    # r[impl proposal.draft+2]
     # r[impl proposal.change]
     def _proposal(self, tok) -> Ref:
         """A `walk proposed` block, or `walk proposed change`: the name, then the draft."""
@@ -451,7 +451,7 @@ class Walk:
         t = self.thread_after(ref)
         return next((n for n in reversed(t.all()) if n.kind == "decision"), None) if t else None
 
-    # r[impl proposal.progress]
+    # r[impl proposal.progress+2]
     # r[impl proposal.change]
     def progress(self) -> Progress:
         """How far the code it proposes has got: proposed, written, settled."""
@@ -547,6 +547,7 @@ class Walk:
     # r[impl check.strict]
     # r[impl proposal.pending]
     # r[impl term.errors+2]
+    # r[impl proposal.draft+2]
     def problems(self) -> list[Problem]:
         out = []
         if self.meta_error:
@@ -569,6 +570,9 @@ class Walk:
             if ref.error:
                 out.append(Problem(severity="error", line=ref.line, message=ref.error, ref=ref.key))
                 continue
+            if ref.kind == "proposal" and self.meta.kind != "prd":
+                message = f"`{ref.target}` is proposed in a codewalk that isn't a PRD: propose it in one"
+                out.append(Problem(severity="warning", line=ref.line, message=message, ref=ref.target))
             if ref.change:
                 if ref.symbol:
                     message = f"a change to `{ref.target}` is proposed, not settled yet"

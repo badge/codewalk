@@ -80,7 +80,10 @@ stage and no samples (`prd.template`). In the browser, a person starts one from 
 with **New PRD**: a title and, in their own words, what they want. codewalk writes the
 PRD at `docs/prd/` and the title's slug, with what they asked for as a standing request at
 the top, and opens it (`prd.start`). An agent working in the same folder finds the
-request with `codewalk context`, and writes into the stage the PRD is at. codewalk is for
+request with `codewalk context`, and writes into the stage the PRD is at. A question in
+a codewalk that shows something wrong with the code becomes a PRD the same way: its thread
+offers to start one, filled in from the thread, and is then given a note saying where the
+PRD is (`prd.from-thread`). codewalk is for
 local use: the server and the agent on the person's own machine, in the same folder.
 
 PRDs have nothing to do with branches or worktrees: a PRD is a file, and the process
@@ -149,3 +152,8 @@ The index MUST offer to start a PRD from a title and what the person wants: it M
 the template at `docs/prd/` and the title's slug, with what they want as a `[!request]`
 signed as them at the top, and open it, refusing if that file exists. It MUST NOT create
 or change a branch or a worktree.
+
+r[prd.from-thread]
+A thread in a codewalk that isn't a PRD MUST offer to start a PRD from it, as the index
+does, with what the person wants filled in from the thread and a link to it; once the PRD
+is started, a note MUST be added to the thread, signed as the person, linking to it.

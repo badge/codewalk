@@ -564,27 +564,15 @@ Where it could go:
 - **Notes on an excerpt** from the browser, written back into the Markdown under the
   block, so a review can leave questions where they apply.
 
-### Proposed: from the code back to codewalks
+### From the code back to codewalks
 
-The context panel shows a symbol in its file, but not which codewalks show it. The
-library could say, so the panel (and the language server's hover, in the code itself)
-can list them:
-
-```walk proposed python
-Library::uses
-def uses(self, ctx: Context, sym: Symbol) -> list[tuple[str, int]]:
-    """The codewalks that show or mention `sym`, with the line of each reference."""
-    out = []
-    for s in self.codewalks:
-        for ref in Walk(ctx, s.rel).refs:
-            if ref.symbol and ref.symbol.file == sym.file and ref.symbol.start <= sym.line <= ref.symbol.end:
-                out.append((s.rel, ref.line))
-    return out
-```
+The context panel shows a symbol in its file, but not which codewalks show it. Saying so
+is proposed in [its own PRD](prd/from-the-code-back-to-codewalks.md).
 
 ## Changelog
 
 What was asked here and how it was settled, newest first.
 
+- 2026-11-07: The proposal for `Library::uses` moved to [a PRD of its own](prd/from-the-code-back-to-codewalks.md), since a codewalk explains code and a PRD proposes it.
 - 2026-11-07 (`Library::uses`): **question** @claude: Parsing every codewalk on each call is fine for two, but not for fifty. → **answer** @claude: Agreed on both assumptions, and on `.codewalk/` with SQLite (the standard library's, so nothing new to install). (1 more note)
 - 2026-11-07 (`Walk::_collect`, `Walk::_resolve`): **question** @matthew: I think the `kind` and `type`s throughout here are coming straight from `markdown_it`, and so we can't turn them into enums? → **answer** @claude: Half and half.

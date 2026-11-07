@@ -35,7 +35,7 @@ from pydantic import BaseModel
 
 # A PRD's front matter: its definitions are its own proposals, not the glossary's
 PRD = re.compile(r"\A---\n(?:.*\n)*?kind:[ \t]*[\"']?prd[\"']?[ \t]*\n(?:.*\n)*?---", re.MULTILINE)
-DEF_LINE = re.compile(r"^(t|f)\[([a-z0-9][a-z0-9.\-]*)\](?:[ \t]+(documented|observed|assumed))?[ \t]*$")
+DEF_LINE = re.compile(r"^(t|f)\[([a-z0-9][a-z0-9.\-]*)\](?:[ \t]+(documented|observed|assumed|cited-only))?[ \t]*$")
 STATUSES = ("documented", "observed", "assumed")
 
 
@@ -44,6 +44,9 @@ class Definition(BaseModel):
     id: str
     # How a fact is known; None for a term
     status: Literal["documented", "observed", "assumed"] | None = None
+    # A term linked only where it's cited, `t[id] cited-only`, since its word is often used
+    # in its ordinary sense
+    cited_only: bool = False
     file: str
     line: int
     text: str
@@ -54,7 +57,7 @@ class Definition(BaseModel):
         return self.id.replace("-", " ")
 
 
-# r[impl term.define]
+# r[impl term.define+2]
 def parse(rel: str, text: str) -> list[Definition]:
     """The terms and facts defined in one file's text, in order.
 
@@ -80,8 +83,12 @@ def parse(rel: str, text: str) -> list[Definition]:
                 break
             body.append(nxt.strip())
         kind = "term" if m.group(1) == "t" else "fact"
+        # `cited-only` is a term's; a fact's status is one of the others
+        if kind == "fact" and m.group(3) == "cited-only":
+            continue
         status = (m.group(3) or "assumed") if kind == "fact" else None
-        out.append(Definition(kind=kind, id=m.group(2), status=status, file=rel, line=i + 1, text=" ".join(body)))
+        cited_only = m.group(3) == "cited-only"
+        out.append(Definition(kind=kind, id=m.group(2), status=status, cited_only=cited_only, file=rel, line=i + 1, text=" ".join(body)))
     return out
 
 
@@ -112,7 +119,7 @@ class Glossary:
         self._pattern: re.Pattern | None = None
         self.refresh()
 
-    # r[impl term.define]
+    # r[impl term.define+2]
     # r[impl term.errors+2]
     # r[impl prd.terms]
     def refresh(self) -> bool:
@@ -155,20 +162,21 @@ class Glossary:
         kind, _, rid = ref.partition(":")
         return (self.terms if kind == "t" else self.facts if kind == "f" else {}).get(rid)
 
+    # r[impl term.cite+2]
     def mentions(self) -> re.Pattern | None:
-        """A pattern for every term as it's written in prose.
+        """A pattern for every term as it's written in prose, but those cited only.
 
         Longest first, singular or plural, whole words only, ignoring case.
 
         Returns
         -------
         re.Pattern or None
-            None if no terms are defined.
+            None if no terms are to be found in prose.
         """
-        if self._pattern is None and self.terms:
-            words = sorted((d.words for d in self.terms.values()), key=len, reverse=True)
+        if self._pattern is None:
+            words = sorted((d.words for d in self.terms.values() if not d.cited_only), key=len, reverse=True)
             alts = "|".join(re.escape(w).replace(r"\ ", r"[ \-]") for w in words)
-            self._pattern = re.compile(rf"\b({alts})(?:s|es)?\b", re.IGNORECASE)
+            self._pattern = re.compile(rf"\b({alts})(?:s|es)?\b", re.IGNORECASE) if words else None
         return self._pattern
 
     def term_for(self, mention: str) -> Definition | None:

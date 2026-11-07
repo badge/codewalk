@@ -26,6 +26,7 @@
       {%- else %}Notes{% endif -%}
     </span>
     <span class="spacer"></span>
+    {% if not prd %}<button class="act" data-action="prd-from-thread" title="Something here needs changing: start a PRD for it, from this thread">Start a PRD</button>{% endif %}
     {% if t.settled %}
     <button class="act" data-action="reply" data-kind="answer">Answer</button>
     <button class="act" data-action="reply" data-kind="question">Ask more</button>

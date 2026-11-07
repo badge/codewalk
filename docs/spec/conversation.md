@@ -28,14 +28,16 @@ is often followed by a decision to go with it (`note.add-settled`).
 ### Proposals
 
 Code that doesn't exist yet can be proposed: drafted in a `walk proposed` block under the
-name it will have (`proposal.draft`). Until the name exists, it's in hand, not broken
+name it will have. That's a PRD's to do: a codewalk explains code as it is, and one that
+isn't a PRD and proposes is warned (`proposal.draft`). Until the name exists, it's in hand, not broken
 (`proposal.pending`). A person agrees a proposal from the browser: a decision, signed as
 them, in the thread under it, which starts one if there's none. Until it's written, the
 proposal is then agreed, and says so on the page and in `codewalk context`, so the agent
 knows it can be written (`proposal.agree`). Once it does, the proposal shows what was written against the
 draft, and can be settled: the block becomes `walk settled`, keeping the draft, so what
-was planned and what was done stay side by side (`proposal.settle`). A codewalk's
-progress is how much of what it proposes is written and settled (`proposal.progress`).
+was planned and what was done stay side by side (`proposal.settle`). A PRD's progress is
+how much of what it proposes is written and settled, and only a PRD shows it
+(`proposal.progress`).
 
 A change to code that exists is proposed in a `walk proposed change` block, under the name
 it has. It shows what there is, then what there will be: the difference from the code as
@@ -116,9 +118,10 @@ r[note.add-settled]
 A settled thread MUST offer, besides resolving it, to add an answer, a question or a
 decision to it.
 
-r[proposal.draft]
+r[proposal.draft+2]
 A `walk proposed` block MUST be read as a proposal: its first line the name the code will
-have, the rest its draft.
+have, the rest its draft. One in a codewalk that isn't a PRD MUST be reported as a
+warning.
 
 r[proposal.pending]
 A proposal whose name doesn't resolve MUST be reported as in hand, not as broken.
@@ -140,9 +143,10 @@ adds shows as added and what it takes out as removed, and counted as proposed un
 settled; settling it MUST turn it into a `walk settled` block, keeping the draft. A
 change to a name that doesn't resolve MUST be reported as broken.
 
-r[proposal.progress]
-A codewalk's progress MUST be counted as how many of its proposals are not written,
-written but not settled, and settled.
+r[proposal.progress+2]
+A PRD's progress MUST be counted as how many of its proposals are not written, written
+but not settled, and settled, and shown with it; a codewalk that isn't a PRD MUST NOT show
+progress.
 
 r[context.brief]
 `codewalk context` MUST list, for each codewalk and spec file with any, its open requests, open

@@ -404,7 +404,7 @@ class Renderer:
             c=c, slug=_slug(c.id), line=env["line"], body=Markup(body), words=word_diff(c.was or "", c.text)
         )
 
-    # r[impl term.cite]
+    # r[impl term.cite+2]
     def text(self, tokens, idx, options, env) -> str:
         """Plain text, with the first mention of each term in a paragraph linked to it."""
         content = html.escape(tokens[idx].content)
@@ -477,7 +477,7 @@ class Renderer:
             The HTML.
         """
         notes = self.notes_html(open_idx, close_idx, env)
-        return templates.get_template("thread.html").render(t=thread, notes=notes)
+        return templates.get_template("thread.html").render(t=thread, notes=notes, prd=self.walk.meta.kind == "prd")
 
     # ---- Embedded symbols ----------------------------------------------------------------
 

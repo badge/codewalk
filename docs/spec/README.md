@@ -31,9 +31,10 @@ run through all of codewalk are defined here, below; the glossary collects every
 
 ## Terms
 
-t[codewalk]
-A Markdown file under the docs folders that names code rather than copying it, making at
-least one reference to it, and holds the conversation about that code.
+t[codewalk] cited-only
+A Markdown file that explains a part of the code, naming it rather than copying it, and
+holds the conversation about it: a PRD is a codewalk that proposes a change. (What
+codewalk called a walkthrough.)
 
 t[spec]
 The Markdown that tracey's config names as specs: in each file, prose saying what we
