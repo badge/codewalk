@@ -1,4 +1,4 @@
-"""A walkthrough: a Markdown file whose references to the code are checked against it.
+"""A codewalk: a Markdown file whose references to the code are checked against it.
 
 Three kinds of reference, each written so the file still reads as plain Markdown:
 
@@ -32,8 +32,8 @@ Three kinds of reference, each written so the file still reads as plain Markdown
 
 Notes (questions, answers, decisions) are blockquotes; see `notes.py`.
 
-A walkthrough may open with YAML front matter (see `FrontMatter`), and its ordinary links
-to other walkthroughs are how walkthroughs relate to each other.
+A codewalk may open with YAML front matter (see `FrontMatter`), and its ordinary links
+to other codewalks are how codewalks relate to each other.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ STAGES: tuple[str, ...] = get_args(Stage)
 
 
 class FrontMatter(BaseModel):
-    """What a walkthrough says about itself, in YAML at its top.
+    """What a codewalk says about itself, in YAML at its top.
 
     All optional; anything else there is left alone, since other tools keep their own keys
     in front matter.
@@ -77,13 +77,13 @@ class FrontMatter(BaseModel):
 
     # Shown in place of the first heading
     title: str | None = None
-    # A sentence or two, for the list of walkthroughs
+    # A sentence or two, for the list of codewalks
     summary: str | None = None
     tags: list[str] = []
-    # Other walkthroughs to read with this one, as paths from this file. Linking to one
+    # Other codewalks to read with this one, as paths from this file. Linking to one
     # in the text relates them too
     related: list[str] = []
-    # What kind of walkthrough: "prd" for one that proposes a change to be made
+    # What kind of codewalk: "prd" for one that proposes a change to be made
     kind: str | None = None
     # For a PRD: where it is in its lifecycle; at the problem if it isn't given
     stage: Stage | None = None
@@ -98,7 +98,7 @@ class FrontMatter(BaseModel):
 
 
 class Ref(BaseModel):
-    """One reference a walkthrough makes, and what it resolved to."""
+    """One reference a codewalk makes, and what it resolved to."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -107,7 +107,7 @@ class Ref(BaseModel):
     # "embed" is a line of a `walk` block (a symbol, or with `r:`, a requirement);
     # "proposal" a `walk proposed` block
     kind: Literal["embed", "inline", "req", "proposal", "term"]
-    # 1-based line in the walkthrough
+    # 1-based line in the codewalk
     line: int
     label: str | None = None
     sig: bool = False
@@ -138,7 +138,7 @@ class Ref(BaseModel):
 
 
 class Progress(BaseModel):
-    """A walkthrough's proposals: not written yet, written and waiting to be settled, and settled.
+    """A codewalk's proposals: not written yet, written and waiting to be settled, and settled.
 
     A PRD starts all proposed and ends all settled.
     """
@@ -221,17 +221,17 @@ def markdown() -> MarkdownIt:
 
 # r[impl walk.what]
 # r[impl prd.check]
-def might_be_walkthrough(text: str) -> bool:
+def might_be_codewalk(text: str) -> bool:
     """Whether a file makes a reference, or is a PRD, which is checked whether it does or not."""
     refers = "```walk" in text or "[[" in text or any(f"]({s}:" in text for s in ("walk", "req", "term", "fact"))
     return refers or terms.is_prd(text)
 
 
 class Context:
-    """What a walkthrough is checked and shown against.
+    """What a codewalk is checked and shown against.
 
     The project's code, spec and glossary, each indexed, and the review state. There's one
-    for a project, shared by every walkthrough in it.
+    for a project, shared by every codewalk in it.
 
     Parameters
     ----------
@@ -269,10 +269,10 @@ class Context:
         return sorted({str(p.relative_to(self.root)) for g in self.spec.globs for p in self.root.glob(g) if p.is_file()})
 
     # r[impl walk.what]
-    def walkthroughs(self) -> list[str]:
+    def codewalks(self) -> list[str]:
         """Markdown files under the docs globs that make at least one reference.
 
-        Spec files aren't walkthroughs, even when their prose cites requirements: they have
+        Spec files aren't codewalks, even when their prose cites requirements: they have
         a view of their own.
 
         Returns
@@ -281,14 +281,14 @@ class Context:
             Paths from the root, in order.
         """
         specs = set(self.spec_paths())
-        return [rel for rel in self.doc_paths() if rel not in specs and might_be_walkthrough((self.root / rel).read_text())]
+        return [rel for rel in self.doc_paths() if rel not in specs and might_be_codewalk((self.root / rel).read_text())]
 
     def editable(self) -> set[str]:
         return set(self.doc_paths()) | {p for p in self.spec_paths() if p.endswith(".md")}
 
 
 class Walk:
-    """One walkthrough, parsed, with every reference resolved.
+    """One codewalk, parsed, with every reference resolved.
 
     Parameters
     ----------
@@ -632,7 +632,7 @@ class Walk:
 
     # r[impl export.plain]
     def export(self, out_rel: str) -> str:
-        """The walkthrough as plain Markdown, for anywhere that won't run this.
+        """The codewalk as plain Markdown, for anywhere that won't run this.
 
         Each embedded symbol becomes a link to it and its code, and each inline one a link.
 
@@ -733,7 +733,7 @@ def set_front_matter(text: str, key: str, value: str) -> str:
     Parameters
     ----------
     text : str
-        The walkthrough's Markdown.
+        The codewalk's Markdown.
     key : str
         The front matter's key.
     value : str
@@ -766,7 +766,7 @@ def settle(text: str, line: int, target: str) -> str:
     Parameters
     ----------
     text : str
-        The walkthrough's Markdown.
+        The codewalk's Markdown.
     line : int
         The line the proposal's name is on, 1-based.
     target : str

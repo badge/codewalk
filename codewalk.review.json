@@ -133,7 +133,7 @@
       "text": "# A requirement's marker in code: a prefix, then `[impl id]` or `[verify id]`, with the\n# version it names after the ID, `+N`, if it isn't 1\nMARKER = re.compile(rf\"\\b([a-z][a-z0-9]*)\\[(impl|verify)\\s+({ID}){VERSION}\\]\")"
     }
   },
-  "docs/walkthrough.md": {
+  "docs/codewalk.md": {
     "App::changed": {
       "digest": "8716a6c27893",
       "text": "    # r[impl serve.live]\n    def changed(self, paths: set[str]) -> Change | None:\n        \"\"\"What a batch of changed files means for the pages.\n\n        Parameters\n        ----------\n        paths : set of str\n            The files that changed, as full paths.\n\n        Returns\n        -------\n        Change or None\n            None if nothing a page shows has changed.\n        \"\"\"\n        with self.lock:\n            code = self.ctx.refresh()\n            docs = set(self.ctx.doc_paths())\n        rels = {str(Path(p).relative_to(self.ctx.root)) for p in paths if Path(p).is_relative_to(self.ctx.root)}\n        change = Change(code=code, docs=sorted(rels & docs), review=self.ctx.review.path.name in rels)\n        return change if change.code or change.docs or change.review else None"

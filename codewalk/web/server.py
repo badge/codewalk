@@ -1,12 +1,12 @@
-"""The web view: walkthroughs in the browser, with their code, an editor and live reload.
+"""The web view: codewalks in the browser, with their code, an editor and live reload.
 
-Each walkthrough is rendered with its code, the code in its file beside it, a browser
+Each codewalk is rendered with its code, the code in its file beside it, a browser
 editor with symbol completion, and live reload as the Markdown or the code changes.
 
-Local only: it listens on 127.0.0.1, and writes only walkthroughs and the review file.
+Local only: it listens on 127.0.0.1, and writes only codewalks and the review file.
 
 Pages and the API are plain functions on `App`, called from Starlette's routes, so they
-can be tested without a server. The index and the walkthroughs are shared state, so every
+can be tested without a server. The index and the codewalks are shared state, so every
 call that reads them holds `App.lock`; Starlette runs each in a worker thread.
 """
 
@@ -73,7 +73,7 @@ class Change(BaseModel):
 
     # The code or the spec changed
     code: bool = False
-    # Walkthroughs whose Markdown changed, as paths from the root
+    # Codewalks whose Markdown changed, as paths from the root
     docs: list[str] = []
     review: bool = False
 
@@ -106,7 +106,7 @@ class App:
         library = Library.of(self.ctx)
         return self.page(
             "index.html",
-            "Walkthroughs",
+            "Codewalks",
             "index",
             {},
             library=library,
@@ -125,7 +125,7 @@ class App:
 
     # r[impl spec.trail]
     def walk_body(self, rel: str, text: str | None = None) -> tuple[str, dict, Walk]:
-        """A walkthrough, with the requirements each block has in its margin.
+        """A codewalk, with the requirements each block has in its margin.
 
         Beside each block, the margin shows the requirements it proposes, implements,
         verifies or cites, each with the prose it came from.
@@ -133,7 +133,7 @@ class App:
         Parameters
         ----------
         rel : str
-            The walkthrough, from the root.
+            The codewalk, from the root.
         text : str or None
             Its Markdown, if not as saved (while it's being edited).
 
@@ -144,7 +144,7 @@ class App:
         data : dict
             The page's data; `margin` is set if there's a margin.
         walk : Walk
-            The walkthrough, parsed.
+            The codewalk, parsed.
         """
         w = Walk(self.ctx, rel, text)
         body, data = render(w)
@@ -234,7 +234,7 @@ class App:
             else:
                 card["href"], card["text"] = "#", None
             card["uses"] = [
-                {"href": f"/walk/{u.walkthrough}?line={u.line}", "title": u.title, "role": self.ROLES[u.role]} for u in used.get(c.id, [])
+                {"href": f"/walk/{u.codewalk}?line={u.line}", "title": u.title, "role": self.ROLES[u.role]} for u in used.get(c.id, [])
             ]
             groups.setdefault(c.lines[0], []).append(card)
         html = templates.get_template("spec_body.html").render(body=body, groups=sorted(groups.items()))
@@ -285,10 +285,10 @@ class App:
     # r[impl term.glossary]
     def glossary_page(self) -> str:
         g = self.ctx.glossary
-        # Where each is cited or mentioned, across the walkthroughs and specs
+        # Where each is cited or mentioned, across the codewalks and specs
         uses: dict[str, list[str]] = {}
         pattern = g.mentions()
-        for rel in sorted(set(self.ctx.walkthroughs()) | set(self.ctx.spec_paths())):
+        for rel in sorted(set(self.ctx.codewalks()) | set(self.ctx.spec_paths())):
             text = (self.ctx.root / rel).read_text()
             for key in {f"t:{m}" for m in re.findall(r"(?:\[\[t:|\(term:)([a-z0-9.\-]+)", text)} | {
                 f"f:{m}" for m in re.findall(r"(?:\[\[f:|\(fact:)([a-z0-9.\-]+)", text)
@@ -414,7 +414,7 @@ class App:
         to: int | None = None,
         about: int | None = None,
     ) -> dict:
-        """Write a note into a walkthrough.
+        """Write a note into a codewalk.
 
         A new question after line `after`, or a note added to the thread that starts on line
         `thread`.
@@ -422,7 +422,7 @@ class App:
         Parameters
         ----------
         rel : str
-            The walkthrough, from the root.
+            The codewalk, from the root.
         kind : str
             The note's kind; a new thread is always a question.
         body : str
@@ -469,7 +469,7 @@ class App:
         return {"written": True, "author": author}
 
     def resolve(self, rel: str, thread: int, mode: str) -> dict:
-        """Take a settled thread out of a walkthrough: into its changelog, or away."""
+        """Take a settled thread out of a codewalk: into its changelog, or away."""
         import datetime
 
         path = self.writable(rel)
@@ -501,7 +501,7 @@ class App:
         Parameters
         ----------
         rel : str
-            The walkthrough, from the root.
+            The codewalk, from the root.
         line : int
             The proposal's line: its name's, as the reference has it.
         end : int
@@ -735,7 +735,7 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
         return JSONResponse({"error": str(exc)}, status_code=409)
 
     async def forbidden(request: Request, exc):
-        return JSONResponse({"error": f"not a walkthrough: {exc}"}, status_code=403)
+        return JSONResponse({"error": f"not a codewalk: {exc}"}, status_code=403)
 
     @asynccontextmanager
     async def lifespan(_):

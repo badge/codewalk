@@ -1,6 +1,6 @@
 """PRDs: a change agreed before it's made, in stages, in a file that reads on its own.
 
-A PRD is a walkthrough with `kind: prd`. Its requirements, terms and facts are written in
+A PRD is a codewalk with `kind: prd`. Its requirements, terms and facts are written in
 it as they'll read in the spec, but they're its own proposals, not the spec's: the spec
 index never reads PRDs, and the glossary skips them. Here each is set against the spec as
 it stands, so a reader sees what's new, what changes and what goes.

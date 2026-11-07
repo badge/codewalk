@@ -1,14 +1,14 @@
 ---
 weight: 20
 title: codewalk's data model
-summary: The things codewalk knows about (code, spec, walkthroughs, notes, review) and how each refers to the others.
+summary: The things codewalk knows about (code, spec, codewalks, notes, review) and how each refers to the others.
 tags: [codewalk, data-model]
-related: [walkthrough.md]
+related: [codewalk.md]
 ---
 
 # codewalk's data model
 
-codewalk knows about five kinds of thing: **code**, the **spec**, **walkthroughs**, the
+codewalk knows about five kinds of thing: **code**, the **spec**, **codewalks**, the
 **notes** in them, and what's been **reviewed**. Each kind has an index, built from files
 in the repository and rebuilt when they change. Nothing is stored apart from the files,
 except what's been reviewed, which is kept in `codewalk.review.json`.
@@ -20,7 +20,7 @@ except what's been reviewed, which is kept in `codewalk.review.json`.
       │              │              │              │
    Symbol ◄─┐   Requirement     Definition      Reviewed
       ▲     │     ▲    ▲            ▲              ▲
-      │   Trace ──┘    │            │              │  by walkthrough, then Ref.key
+      │   Trace ──┘    │            │              │  by codewalk, then Ref.key
       │                │            │              │
       └──────────── Ref ────────────┘──────────────┘
                      ▲
@@ -37,7 +37,7 @@ except what's been reviewed, which is kept in `codewalk.review.json`.
 
 ## The project: Context
 
-A [[doc::Context]] holds everything a walkthrough is checked against: the indexes of code,
+A [[doc::Context]] holds everything a codewalk is checked against: the indexes of code,
 spec and glossary, and the review state. There's one a project, built from its
 [[codewalk::config::Config]].
 
@@ -75,12 +75,12 @@ lines in any Markdown file.
 Definition
 ```
 
-## Walkthroughs: Walk and Ref
+## Codewalks: Walk and Ref
 
 A [[Walk]] is one Markdown file, parsed. Everything it names is a [[Ref]]: a line of a
 `walk` block, an inline `[[name]]`, a requirement, a term, or a proposal. Resolving a
 ref fills in exactly one of its `symbol`, `requirement` or `definition`, or its `error`.
-A ref is the hub of the model: it's where a walkthrough meets each index.
+A ref is the hub of the model: it's where a codewalk meets each index.
 
 ```walk
 Ref
@@ -90,7 +90,7 @@ Problem
 
 ## Notes: Thread and Note
 
-A [[notes::Thread]] is a blockquote of [[Note]]s, in the walkthrough's own Markdown. A note's
+A [[notes::Thread]] is a blockquote of [[Note]]s, in the codewalk's own Markdown. A note's
 replies are notes too, nested under it. A thread is *about* the refs in the block above
 it, by line (`about_line`) rather than by holding them.
 
@@ -111,7 +111,7 @@ SpecView
 
 ## The trail: Link
 
-[[trail::Link]] ties a block of a walkthrough to a requirement, with its role: proposes,
+[[trail::Link]] ties a block of a codewalk to a requirement, with its role: proposes,
 implements, verifies or cites. It's what the margin shows.
 
 ```walk
@@ -120,7 +120,7 @@ trail::Link
 
 ## Reviewed
 
-[[ReviewState]] keeps one [[Reviewed]] for each ref that's been reviewed, by walkthrough
+[[ReviewState]] keeps one [[Reviewed]] for each ref that's been reviewed, by codewalk
 and then by the ref's key, with a digest of the code as it was. If the code changes, the
 digest doesn't match, and the ref shows as changed.
 
@@ -128,9 +128,9 @@ digest doesn't match, and the ref shows as changed.
 Reviewed
 ```
 
-## Across walkthroughs: Library and Brief
+## Across codewalks: Library and Brief
 
-The [[Library]] summarises every walkthrough and spec for the index page, one
+The [[Library]] summarises every codewalk and spec for the index page, one
 [[Summary]] or [[SpecSummary]] each. A [[Brief]] is what `codewalk context` prints for an
 agent: what's asked, what's proposed, what's broken.
 

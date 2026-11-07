@@ -454,7 +454,7 @@ a.term.fact { color: var(--warn); }
 .gl-uses { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 0; }
 .gl-group h2 .where { margin-left: 8px; font-family: var(--mono); font-size: 12px; font-weight: normal; color: var(--muted); }
 
-/* ---- A walkthrough's margin: the requirements beside the code, with their prose -------- */
+/* ---- A codewalk's margin: the requirements beside the code, with their prose -------- */
 
 .prose.spec.no-margin { grid-template-columns: minmax(0, 1fr); max-width: 860px; }
 .prose.spec.no-margin .margin { display: none; }
@@ -480,7 +480,7 @@ pre.diff.plan { border-top: 1px dashed var(--ok); }
 .progress .meter { width: 90px; margin: 0; height: 5px; }
 .pill.prd { background: var(--accent-soft); color: var(--accent); }
 
-/* With the code open beside it, a walkthrough's margin steps aside for the prose */
+/* With the code open beside it, a codewalk's margin steps aside for the prose */
 .layout.with-context .prose.spec { grid-template-columns: minmax(0, 1fr); max-width: 860px; }
 .layout.with-context .prose.spec .margin { display: none; }
 

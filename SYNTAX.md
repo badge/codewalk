@@ -98,7 +98,7 @@ end, one list item a thread, newest first.
 title: …          # else the first heading
 summary: …        # else the first paragraph
 tags: [a, b]      # or one, as a string
-related: [path]   # other walkthroughs, from this file
+related: [path]   # other codewalks, from this file
 kind: prd         # a PRD: a change proposed in full, settled as it's made
 ---
 ```

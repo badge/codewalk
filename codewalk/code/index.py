@@ -1,4 +1,4 @@
-"""What a walkthrough can refer to: every item in the source, and every requirement in the spec.
+"""What a codewalk can refer to: every item in the source, and every requirement in the spec.
 
 The source is Rust or Python, found with tree-sitter. Rust is indexed here; Python in
 `python.py`.
@@ -41,7 +41,7 @@ ITEM_KINDS = {
 
 
 class Symbol(BaseModel):
-    """One thing a walkthrough can point at."""
+    """One thing a codewalk can point at."""
 
     qualified: str
     kind: str

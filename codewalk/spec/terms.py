@@ -16,7 +16,7 @@ to it, so a reader can hover any use of it for what it means.
 A **fact** is something about the world we rely on and don't control: an API's
 behaviour, a market's rules. It says how we know it: `documented`, `observed` or
 `assumed` (the default). Facts aren't requirements, which say what we do; a requirement
-or a walkthrough cites the facts it rests on, so when one turns out wrong, what rests on
+or a codewalk cites the facts it rests on, so when one turns out wrong, what rests on
 it can be found.
 
 Cite either explicitly with `[[t:deadband]]` and `[[f:ercot.settlement-periods]]`, or as

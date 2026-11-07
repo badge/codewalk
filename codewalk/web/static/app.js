@@ -13,7 +13,7 @@
     get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
     set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
   };
-  // The reading view for this page's file: a walkthrough, or a spec
+  // The reading view for this page's file: a codewalk, or a spec
   const reading = () => (data.spec ? "spec" : "walk");
   const api = async (path, body) => {
     const res = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
@@ -299,7 +299,7 @@
     } else if (action === "resolve") {
       const thread = btn.closest(".thread");
       const mode = btn.dataset.mode;
-      if (mode === "remove" && !confirm("Remove this thread from the walkthrough altogether?")) return;
+      if (mode === "remove" && !confirm("Remove this thread from the codewalk altogether?")) return;
       await api("/api/resolve", { path: data.doc, thread: +thread.dataset.thread, mode });
       toast(mode === "changelog" ? "Moved to the changelog, as one line" : "Removed");
       refresh();
@@ -382,7 +382,7 @@
 
   // ---- Specs: the requirements in the margin, beside the prose that cites them ---------------
 
-  // A walkthrough's margin of requirements can be put away, and stays as left
+  // A codewalk's margin of requirements can be put away, and stays as left
   // The margin's state, before anything lays it out
   let marginRows = []; // [the prose's top, how far below it its cards are], in the document's terms
   let focusCard = null; // the card you came for, which `followMargin` lines up rather than its group

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block crumb %}<a href="/">Walkthroughs</a> / spec / {{ rel }}{% endblock %}
+{% block crumb %}<a href="/">Codewalks</a> / spec / {{ rel }}{% endblock %}
 {% block actions %}
   <span class="pill">{{ v.defined | length }} requirements</span>
   {% if v.uncited %}<span class="pill warn" title="Requirements here that no prose cites">{{ v.uncited | length }} not in the prose</span>{% endif %}

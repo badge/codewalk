@@ -4,7 +4,7 @@ weight: 20
 
 ## The conversation
 
-A walkthrough is also where the conversation about the code happens, so that it's still
+A codewalk is also where the conversation about the code happens, so that it's still
 there in the next session, beside what it's about, and not lost in a chat.
 
 ### Notes
@@ -20,7 +20,7 @@ anything open at any depth keeps the thread open (`note.replies`).
 Notes can be written in the Markdown or from the browser, where they're signed as the
 author in the config or from git (`note.write`). Asking about one excerpt of several in a
 block puts the question directly under that excerpt (`note.ask-here`). A settled thread
-can leave the text: into a changelog at the end of the walkthrough, compacted to a line
+can leave the text: into a changelog at the end of the codewalk, compacted to a line
 of what was asked and how it was settled, or removed altogether (`note.resolve`). An open
 one can't (`note.resolve-open`). A settled thread can still be added to, since an answer
 is often followed by a decision to go with it (`note.add-settled`).
@@ -34,7 +34,7 @@ them, in the thread under it, which starts one if there's none. Until it's writt
 proposal is then agreed, and says so on the page and in `codewalk context`, so the agent
 knows it can be written (`proposal.agree`). Once it does, the proposal shows what was written against the
 draft, and can be settled: the block becomes `walk settled`, keeping the draft, so what
-was planned and what was done stay side by side (`proposal.settle`). A walkthrough's
+was planned and what was done stay side by side (`proposal.settle`). A codewalk's
 progress is how much of what it proposes is written and settled (`proposal.progress`).
 
 A change to code that exists is proposed in a `walk proposed change` block, under the name
@@ -45,7 +45,7 @@ say whether the change has been made (`proposal.change`).
 ### What's in hand
 
 At the start of a session, `codewalk context` says what's in hand across every
-walkthrough and spec: standing requests, open questions, proposals not written, proposals written
+codewalk and spec: standing requests, open questions, proposals not written, proposals written
 and not settled, code changed since review, and broken references, each with where it is
 and what it's about (`context.brief`).
 
@@ -77,7 +77,7 @@ Begun and not finished: an open question or request, a proposal not written or n
 settled, or code changed since its review. `codewalk context` says what's in hand.
 
 t[changelog]
-The `## Changelog` section at the end of a walkthrough, where settled threads go, one
+The `## Changelog` section at the end of a codewalk, where settled threads go, one
 line each, newest first.
 
 ## Requirements
@@ -105,7 +105,7 @@ that reference, splitting the block in two if more of it follows.
 
 r[note.resolve]
 A settled thread MUST be removable, either altogether or into a `## Changelog` section at
-the end of the walkthrough, newest first, as one line giving its date, what it was about,
+the end of the codewalk, newest first, as one line giving its date, what it was about,
 its first note's first sentence, the settling note's first sentence and how many notes
 came between.
 
@@ -141,10 +141,10 @@ settled; settling it MUST turn it into a `walk settled` block, keeping the draft
 change to a name that doesn't resolve MUST be reported as broken.
 
 r[proposal.progress]
-A walkthrough's progress MUST be counted as how many of its proposals are not written,
+A codewalk's progress MUST be counted as how many of its proposals are not written,
 written but not settled, and settled.
 
 r[context.brief]
-`codewalk context` MUST list, for each walkthrough and spec file with any, its open requests, open
+`codewalk context` MUST list, for each codewalk and spec file with any, its open requests, open
 questions, unwritten proposals, written but unsettled proposals, code changed since
 review and broken references, each with its line and the names it's about.

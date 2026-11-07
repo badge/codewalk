@@ -6,7 +6,7 @@ weight: 30
 
 codewalk works beside tracey. Tracey holds the code to the spec: which requirements are
 implemented and verified, and where. codewalk shows the spec beside the prose it comes
-from, and beside the walkthroughs that use it. Everything about coverage stays with
+from, and beside the codewalks that use it. Everything about coverage stays with
 tracey.
 
 ### Requirements
@@ -19,7 +19,7 @@ version bumped, `r[id+2]`, so code written against the old text can be found
 ([[f:tracey.versions]]). The code names a requirement in a comment, `r[impl id]` or
 `r[verify id]`, with the version it was written against if it isn't the first,
 `r[impl id+2]`, and codewalk finds the symbol each is on (`spec.traces`), so a
-requirement in a walkthrough can show its code.
+requirement in a codewalk can show its code.
 
 ### Prose beside the spec
 
@@ -31,7 +31,7 @@ citations name requirements not written yet (`spec.view`). Reconciling a require
 its prose records both as they stand; when either changes after that, the view says
 which (`spec.drift`).
 
-From a walkthrough, each block's requirements, whether it proposes, implements, verifies
+From a codewalk, each block's requirements, whether it proposes, implements, verifies
 or cites them, are shown in its margin, and each one leads to its spec at the prose it
 comes from (`spec.trail`).
 
@@ -76,7 +76,7 @@ A requirement or the prose citing it having changed since the two were last reco
 so one may no longer say what the other does. Reconciling records both as they stand.
 
 t[trail]
-The path from a block of a walkthrough to the requirements it proposes, implements,
+The path from a block of a codewalk to the requirements it proposes, implements,
 verifies or cites, and from each of those to the prose in its spec it comes from.
 
 t[glossary]
@@ -133,7 +133,7 @@ Reconciling a requirement MUST record digests of it and of the prose citing it, 
 spec view MUST then show whether the prose, the requirement or both have changed since.
 
 r[spec.trail]
-A walkthrough's margin MUST show, beside each block, the requirements it proposes,
+A codewalk's margin MUST show, beside each block, the requirements it proposes,
 implements, verifies or cites, and each MUST link to its spec at the prose that cites it,
 or at the requirement if no prose does.
 
@@ -155,4 +155,4 @@ spec defines isn't a second definition.
 r[term.glossary]
 The glossary page MUST list every term and fact, grouped by the file that defines it,
 spec files first in the order the index lists them, each linked to its definition and to
-the walkthroughs and spec files that cite or mention it.
+the codewalks and spec files that cite or mention it.

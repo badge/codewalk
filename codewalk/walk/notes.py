@@ -1,4 +1,4 @@
-"""Notes: questions, answers, decisions and requests, kept in the walkthrough itself.
+"""Notes: questions, answers, decisions and requests, kept in the codewalk itself.
 
 A thread is a blockquote whose paragraphs start with a kind, and optionally who wrote it:
 
@@ -27,12 +27,12 @@ its replies; a **request** (a standing ask, for something that applies throughou
 until a `[!done]` does. A thread is open while any question or request in it is, at any
 depth.
 
-A thread that's settled can be **resolved**: moved to the walkthrough's changelog,
+A thread that's settled can be **resolved**: moved to the codewalk's changelog,
 compacted to one line (what was asked, and how it was settled), or removed outright.
 
 Notes live in the Markdown, not beside it, so they show in a diff, go wherever the file
 goes, and are there for the next person, or the next agent, to read. That's what makes a
-walkthrough a dialogue that carries across runs.
+codewalk a dialogue that carries across runs.
 """
 
 from __future__ import annotations
@@ -135,12 +135,12 @@ class Thread(BaseModel):
 
 # r[impl note.syntax]
 def threads(tokens: list[Token]) -> list[tuple[int, int, Thread]]:
-    """Every thread in a parsed walkthrough.
+    """Every thread in a parsed codewalk.
 
     Parameters
     ----------
     tokens : list of Token
-        The walkthrough, parsed.
+        The codewalk, parsed.
 
     Returns
     -------
@@ -250,7 +250,7 @@ def ask(text: str, after_line: int, author: str | None, body: str, kind: Kind = 
     Parameters
     ----------
     text : str
-        The walkthrough's Markdown.
+        The codewalk's Markdown.
     after_line : int
         The line to put it after, 1-based.
     author : str or None
@@ -280,7 +280,7 @@ def request(text: str, author: str | None, body: str) -> str:
     Parameters
     ----------
     text : str
-        The walkthrough's Markdown.
+        The codewalk's Markdown.
     author : str or None
         Who's asking.
     body : str
@@ -306,7 +306,7 @@ def ask_about(text: str, line: int, author: str | None, body: str) -> str:
     Parameters
     ----------
     text : str
-        The walkthrough's Markdown.
+        The codewalk's Markdown.
     line : int
         The reference's line, 1-based.
     author : str or None
@@ -337,7 +337,7 @@ def reply(text: str, thread: Thread, kind: Kind, author: str | None, body: str) 
     Parameters
     ----------
     text : str
-        The walkthrough's Markdown.
+        The codewalk's Markdown.
     thread : Thread
         The thread, as parsed from `text`.
     kind : Kind
@@ -365,7 +365,7 @@ def reply_to(text: str, note: Note, kind: Kind, author: str | None, body: str) -
     Parameters
     ----------
     text : str
-        The walkthrough's Markdown.
+        The codewalk's Markdown.
     note : Note
         The note replied to, as parsed from `text`.
     kind, author, body
@@ -438,7 +438,7 @@ def resolve(text: str, thread: Thread, mode: Literal["changelog", "remove"], dat
     Parameters
     ----------
     text : str
-        The walkthrough's Markdown.
+        The codewalk's Markdown.
     thread : Thread
         The thread, as parsed from `text`.
     mode : {"changelog", "remove"}

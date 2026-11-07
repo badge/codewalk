@@ -5,7 +5,7 @@ weight: 0
 # codewalk
 
 codewalk is for reading code with someone: a person, or an agent, now or in a later
-session. A walkthrough is a Markdown file that names the code it's about rather than
+session. A codewalk is a Markdown file that names the code it's about rather than
 copying it, so it can't quietly go out of date. codewalk checks that every name still
 means something, shows the code as it stands, and remembers what's been reviewed, so a
 change shows up where it matters.
@@ -19,7 +19,7 @@ Each file also defines the words it uses with a meaning of their own, and the fa
 other tools it relies on, so it reads complete without anything else open. The words that
 run through all of codewalk are defined here, below; the glossary collects every one.
 
-- [Walkthroughs](walkthroughs.md): naming code, showing it, checking it, reviewing it.
+- [Codewalks](codewalks.md): naming code, showing it, checking it, reviewing it.
 - [The conversation](conversation.md): notes, proposals, and what's in hand.
 - [PRDs](prds.md): agreeing a change before making it, in stages, in a file of its own.
 - [Specs and terms](specs.md): prose beside its requirements, and a glossary.
@@ -31,7 +31,7 @@ run through all of codewalk are defined here, below; the glossary collects every
 
 ## Terms
 
-t[walkthrough]
+t[codewalk]
 A Markdown file under the docs folders that names code rather than copying it, making at
 least one reference to it, and holds the conversation about that code.
 

@@ -1,4 +1,4 @@
-# Where codewalk looks, when it's run on itself: its own code and tests, and its walkthroughs.
+# Where codewalk looks, when it's run on itself: its own code and tests, and its codewalks.
 sources = ["codewalk/**/*.py", "tests/**/*.py"]
 specs = ["docs/spec/**/*.md"]
 docs = ["docs/**/*.md"]

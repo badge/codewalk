@@ -16,11 +16,11 @@ class Config(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # The code walkthroughs can refer to: `.rs` and `.py` files
+    # The code codewalks can refer to: `.rs` and `.py` files
     sources: list[str] = ["src/**/*.rs"]
     # Markdown with tracey's requirement markers, `r[id]` on a line of its own
     specs: list[str] = ["docs/spec/**/*.md"]
-    # Where walkthroughs are: any Markdown file here that makes a reference is one
+    # Where codewalks are: any Markdown file here that makes a reference is one
     docs: list[str] = ["docs/**/*.md"]
     # Who notes written in the browser are from, as `@author`; else the first word of
     # git's user.name, in lower case

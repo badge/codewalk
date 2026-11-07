@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block crumb %}<a href="/">Walkthroughs</a> / {{ rel }}{% endblock %}
+{% block crumb %}<a href="/">Codewalks</a> / {{ rel }}{% endblock %}
 {% block actions %}
   {% if errors %}<span class="pill err">{{ errors }} broken</span>{% else %}<span class="pill ok">all references resolve</span>{% endif %}
   {% if changed %}<span class="pill warn">{{ changed }} changed since review</span>{% endif %}

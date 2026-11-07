@@ -4,7 +4,7 @@ summary: "A PRD goes from the problem to prose, a spec and the shape of the code
 kind: prd
 stage: work
 tags: [prd, spec]
-related: ["../walkthrough.md"]
+related: ["../codewalk.md"]
 ---
 
 # Authoring PRDs
@@ -189,7 +189,7 @@ r[prd.requirements]
 A requirement marker on a line of its own in a PRD MUST be read as a requirement the PRD
 proposes, with the paragraph after it as its text, and one followed by the word `removed`,
 `r[id+N] removed`, as a requirement it removes. Neither MUST be read as part of the spec:
-not by the spec view, the glossary, the traces or the margin of another walkthrough.
+not by the spec view, the glossary, the traces or the margin of another codewalk.
 
 r[prd.compare]
 Each requirement a PRD proposes MUST be shown against the spec as it stands: as new if the

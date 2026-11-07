@@ -152,7 +152,7 @@ def test_search_matches_words_in_any_order(repo):
     assert names and names[0].endswith("other::Battery::command")
 
 
-# ---- Walkthroughs -----------------------------------------------------------------------
+# ---- Codewalks -----------------------------------------------------------------------
 
 
 # r[verify ref.forms]
@@ -402,7 +402,7 @@ def test_python_exports_as_a_python_block(pyrepo):
     assert "```python\nLIMIT = 3\n```" in w.export("docs/out.md")
 
 
-# ---- Front matter, and how walkthroughs relate ---------------------------------------------
+# ---- Front matter, and how codewalks relate ---------------------------------------------
 
 
 def test_front_matter_gives_the_title_summary_and_tags(repo):
@@ -439,14 +439,14 @@ def test_front_matter_that_isnt_valid_is_an_error(repo):
     assert problem.severity == "error" and "front matter" in problem.message
 
 
-def test_walkthroughs_relate_by_linking_to_each_other(repo):
+def test_codewalks_relate_by_linking_to_each_other(repo):
     from codewalk.walk.library import Library
 
     (repo / "docs/a.md").write_text("---\ntags: [x, y]\n---\n# A\n\n[[MARGIN]], then [B](b.md#start).\n")
     (repo / "docs/b.md").write_text("---\ntags: [y]\nrelated: [sub/c.md]\n---\n# B\n\n[[MARGIN]]\n")
     (repo / "docs/sub").mkdir()
     (repo / "docs/sub/c.md").write_text("# C\n\n[[MARGIN]]\n")
-    (repo / "docs/plain.md").write_text("# Not a walkthrough\n\n[A](a.md)\n")
+    (repo / "docs/plain.md").write_text("# Not a codewalk\n\n[A](a.md)\n")
     library = Library.of(ctx(repo))
     a, b, c = (library.get(f"docs/{n}") for n in ("a.md", "b.md", "sub/c.md"))
     assert a.links_to == ["docs/b.md"] and a.linked_from == []
@@ -507,7 +507,7 @@ def test_the_pages_render(client):
 
 
 # r[verify serve.local]
-def test_only_walkthroughs_can_be_edited_or_saved(client, repo):
+def test_only_codewalks_can_be_edited_or_saved(client, repo):
     assert client.get("/edit/src/lib.rs").status_code == 403
     assert client.post("/api/save", json={"path": "src/lib.rs", "text": "oops"}).status_code == 403
     assert (repo / "src/lib.rs").read_text() == LIB
@@ -1089,10 +1089,10 @@ def test_a_citation_written_in_backticks_is_an_example_not_a_citation(repo):
 
 
 # r[verify walk.what]
-def test_a_walkthrough_is_markdown_in_the_docs_that_makes_a_reference_and_isnt_spec(repo):
+def test_a_codewalk_is_markdown_in_the_docs_that_makes_a_reference_and_isnt_spec(repo):
     (repo / "docs/plain.md").write_text("# Nothing here\n\nJust words.\n")
     (repo / "docs/walk.md").write_text("# Walk\n\nSee [[MARGIN]].\n")
-    assert ctx(repo).walkthroughs() == ["docs/walk.md"]
+    assert ctx(repo).codewalks() == ["docs/walk.md"]
 
 
 # r[verify spec.trail]
@@ -1108,7 +1108,7 @@ def test_a_blocks_requirements_are_in_the_margin_linked_to_their_prose(repo):
 
 
 # r[verify serve.live]
-def test_a_change_to_a_walkthrough_or_the_code_reaches_the_pages(repo):
+def test_a_change_to_a_codewalk_or_the_code_reaches_the_pages(repo):
     from codewalk.web.server import App
 
     (repo / "docs/walk.md").write_text("# Walk\n\nSee [[MARGIN]].\n")
@@ -1179,7 +1179,7 @@ def test_the_server_stops_on_ctrl_c_with_a_page_open(repo):
 
 
 # r[verify ui.weight]
-def test_walkthroughs_and_specs_are_listed_in_order_of_weight(repo):
+def test_codewalks_and_specs_are_listed_in_order_of_weight(repo):
     from codewalk.walk.library import Library
 
     for name, front in [("b", "weight: 20"), ("a", ""), ("c", "weight: 10"), ("d", "")]:
@@ -1389,7 +1389,7 @@ def test_starting_a_prd_from_the_index_writes_it_with_what_was_asked(client, rep
 
 
 # r[verify prd.template]
-def test_a_comment_in_a_walkthrough_isnt_shown(repo):
+def test_a_comment_in_a_codewalk_isnt_shown(repo):
     body, _ = render(walk(repo, "# W\n\n<!-- For whoever edits it.\nOn two lines. -->\n\nShown.\n"))
     assert "whoever" not in body and "Shown." in body
 

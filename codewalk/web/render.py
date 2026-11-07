@@ -1,4 +1,4 @@
-"""A walkthrough as HTML, for the web view.
+"""A codewalk as HTML, for the web view.
 
 markdown-it renders the prose; codewalk takes over its fences (a `walk` block becomes the
 code it names), its links (`walk:` links become symbols) and the `[[…]]` token. The
@@ -82,7 +82,7 @@ def symbol_data(walk: Walk, s: Symbol) -> dict:
     Parameters
     ----------
     walk : Walk
-        The walkthrough the page shows.
+        The codewalk the page shows.
     s : Symbol
         The symbol.
 
@@ -182,12 +182,12 @@ def diff_rows(before: str, after: str, context: int = 2) -> list[dict]:
 
 
 class Renderer:
-    """Renders one walkthrough, collecting what its page needs as it goes.
+    """Renders one codewalk, collecting what its page needs as it goes.
 
     Parameters
     ----------
     walk : Walk
-        The walkthrough, parsed.
+        The codewalk, parsed.
     spec_mode : bool
         Whether it's a spec, whose requirements are rendered as anchors with their code.
     """
@@ -206,8 +206,8 @@ class Renderer:
         self.by_line = {(r.line, r.key if r.kind == "embed" else r.target): r for r in walk.refs}
 
     @cached_property
-    def walkthroughs(self) -> set[str]:
-        return set(self.ctx.walkthroughs())
+    def codewalks(self) -> set[str]:
+        return set(self.ctx.codewalks())
 
     @cached_property
     def specs(self) -> set[str]:
@@ -336,7 +336,7 @@ class Renderer:
         return key
 
     def definition_href(self, d: Definition) -> str:
-        view = "spec" if d.file in self.specs else "walk" if d.file in self.walkthroughs else "glossary"
+        view = "spec" if d.file in self.specs else "walk" if d.file in self.codewalks else "glossary"
         anchor = f"{d.kind[0]}-{_slug(d.id)}"
         return f"/glossary#{anchor}" if view == "glossary" else f"/{view}/{d.file}#{anchor}"
 
@@ -604,9 +604,9 @@ class Renderer:
             target = {"walk": rest, "req": "r:" + rest, "term": "t:" + rest, "fact": "f:" + rest}[scheme]
             return self.inline_ref(target, label, env["line"])
         if href.split("#")[0].endswith(".md") and not re.match(r"^[a-z]+:", href):
-            # A link to another walkthrough opens it here
+            # A link to another codewalk opens it here
             target = os.path.normpath(os.path.join(os.path.dirname(self.walk.rel), href.split("#")[0]))
-            if target in self.walkthroughs:
+            if target in self.codewalks:
                 tok.attrSet("href", f"/walk/{target}")
                 tok.attrSet("class", "walklink")
             elif target in self.specs:
@@ -749,7 +749,7 @@ class Renderer:
 
 
 def render(walk: Walk, spec_mode: bool = False) -> tuple[str, dict]:
-    """The walkthrough as HTML, and the data its page needs.
+    """The codewalk as HTML, and the data its page needs.
 
     The data is each symbol and requirement it refers to, for hover cards and the context
     panel.
@@ -757,7 +757,7 @@ def render(walk: Walk, spec_mode: bool = False) -> tuple[str, dict]:
     Parameters
     ----------
     walk : Walk
-        The walkthrough, parsed.
+        The codewalk, parsed.
     spec_mode : bool
         It's a spec file: `r[id]` paragraphs are requirements, shown as such.
 

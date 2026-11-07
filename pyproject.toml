@@ -1,7 +1,7 @@
 [project]
 name = "codewalk"
 version = "0.1.0"
-description = "Markdown walkthroughs of code, with symbol references checked against the source and shown in context"
+description = "Markdown codewalks of code, with symbol references checked against the source and shown in context"
 requires-python = ">=3.11"
 dependencies = [
     "tree-sitter>=0.25,<0.26",

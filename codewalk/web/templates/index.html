@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block crumb %}Walkthroughs{% endblock %}
+{% block crumb %}Codewalks{% endblock %}
 {% block body %}
 <main class="index">
   <div class="index-head">
     <div>
-      <h1>Walkthroughs</h1>
+      <h1>Codewalks</h1>
       <p class="lede">Markdown about the code, with every reference checked against it and shown in context.
         {{ symbols }} symbols indexed, {{ requirements }} requirements.</p>
     </div>
@@ -17,7 +17,7 @@
     <div class="cp-foot"><span class="np-error"></span><button type="button" class="tb" data-role="cancel">Cancel</button><button class="tb primary">Start it</button></div>
   </form>
 
-  {% if library.walkthroughs %}
+  {% if library.codewalks %}
   <div class="filters">
     <input class="filter" id="filter" placeholder="Filter by title, summary, path or tag" spellcheck="false" autocomplete="off">
     <div class="tags" id="tag-filter">
@@ -65,7 +65,7 @@
     </div>
   </section>
   {% endfor %}
-  <p class="empty" id="no-match" hidden>No walkthroughs match.</p>
+  <p class="empty" id="no-match" hidden>No codewalks match.</p>
   {% if library.specs %}
   <section class="specs-list">
     <h2 class="folder-name">specs: the prose beside the requirements it gives rise to</h2>
@@ -90,7 +90,7 @@
   </section>
   {% endif %}
   {% else %}
-  <p class="empty">No walkthroughs yet: a Markdown file under the docs folders with a <code>```walk</code> block or a <code>[[symbol]]</code> becomes one.</p>
+  <p class="empty">No codewalks yet: a Markdown file under the docs folders with a <code>```walk</code> block or a <code>[[symbol]]</code> becomes one.</p>
   {% endif %}
 </main>
 {% endblock %}

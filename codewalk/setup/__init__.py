@@ -1,10 +1,10 @@
 """`codewalk init`: set codewalk up in a project, for people and agents alike.
 
 - `codewalk.toml`, if there isn't one, so it's clear where codewalk looks.
-- A section in `AGENTS.md` saying how walkthroughs, specs and the glossary work here,
+- A section in `AGENTS.md` saying how codewalks, specs and the glossary work here,
   between markers so running init again replaces it rather than adding another.
 - Two skills, in `.claude/skills/`: `codewalk-propose`, to propose a change as a
-  walkthrough before writing it, and `codewalk-work`, to carry one forward.
+  codewalk before writing it, and `codewalk-work`, to carry one forward.
 
 Every file it would touch is reported, and `--dry-run` touches none.
 """
@@ -25,11 +25,11 @@ PAST = {
 }
 
 CONFIG = """# Where codewalk looks, as globs from here.
-# The code walkthroughs can refer to: .rs and .py files
+# The code codewalks can refer to: .rs and .py files
 sources = {sources}
 # Markdown with tracey's requirement markers, r[id] on a line of its own
 specs = ["docs/spec/**/*.md"]
-# Walkthroughs: any Markdown file here that makes a reference is one
+# Codewalks: any Markdown file here that makes a reference is one
 docs = ["docs/**/*.md"]
 """
 
@@ -44,7 +44,7 @@ def _fill(text: str, values: dict[str, str]) -> str:
     return text
 
 
-def init(root: Path, command: str | None = None, walkthroughs: str = "docs/walkthroughs", dry_run: bool = False) -> list[str]:
+def init(root: Path, command: str | None = None, codewalks: str = "docs/codewalks", dry_run: bool = False) -> list[str]:
     """Set codewalk up in the project at `root`.
 
     Parameters
@@ -53,8 +53,8 @@ def init(root: Path, command: str | None = None, walkthroughs: str = "docs/walkt
         The project's root.
     command : str or None
         How to run codewalk there, for the docs and skills; worked out if None.
-    walkthroughs : str
-        Where walkthroughs go, from the root.
+    codewalks : str
+        Where codewalks go, from the root.
     dry_run : bool
         Report what it would do, and touch nothing.
 
@@ -76,7 +76,7 @@ def init(root: Path, command: str | None = None, walkthroughs: str = "docs/walkt
     install = ""
     if not inside:
         install = "\nIf `codewalk` isn't a command yet, install it from its repository with\n`uv tool install --editable .`.\n"
-    values = {"codewalk": command, "codewalk_link": link, "codewalk_syntax": syntax, "install": install, "walkthroughs": walkthroughs}
+    values = {"codewalk": command, "codewalk_link": link, "codewalk_syntax": syntax, "install": install, "codewalks": codewalks}
     done: list[str] = []
 
     def write(rel: str, text: str, what: str) -> None:

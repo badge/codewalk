@@ -1,5 +1,5 @@
 """The README's examples name codewalk's own code, so they're checked against it like any
-walkthrough: a renamed function shows up here, not in a reader's confusion."""
+codewalk: a renamed function shows up here, not in a reader's confusion."""
 
 import re
 from pathlib import Path
@@ -15,7 +15,7 @@ def context() -> Context:
     return Context(ROOT, Config.load(ROOT))
 
 
-def test_every_example_walkthrough_in_the_readme_resolves():
+def test_every_example_codewalk_in_the_readme_resolves():
     ctx = context()
     examples = re.findall(r"^````markdown\n(.*?)^````$", README, flags=re.M | re.S)
     assert examples

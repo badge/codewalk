@@ -1,12 +1,12 @@
-"""What's in hand in the walkthroughs, for whoever picks the work up next.
+"""What's in hand in the codewalks, for whoever picks the work up next.
 
 That's open questions, code proposed but not written, proposals written and waiting to be
 settled, code changed since someone reviewed it, and references that no longer resolve.
 
 `codewalk context` prints it, as Markdown for an agent to read at the start of a run, or
-as JSON. It's the walkthroughs' half of a dialogue that carries across runs: the human
-asks and decides in the walkthrough, the agent reads this, does the work, answers in the
-walkthrough, and the next run starts from there.
+as JSON. It's the codewalks' half of a dialogue that carries across runs: the human
+asks and decides in the codewalk, the agent reads this, does the work, answers in the
+codewalk, and the next run starts from there.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ class Item(BaseModel):
 
 
 class Brief(BaseModel):
-    walkthrough: str
+    codewalk: str
     title: str
     # For a PRD, its stage, and so what may be written in it yet
     stage: Stage | None = None
@@ -46,7 +46,7 @@ class Brief(BaseModel):
 def brief(ctx: Context, rel: str) -> Brief:
     w = Walk(ctx, rel)
     stage = (w.meta.stage or "problem") if w.meta.kind == "prd" else None
-    out = Brief(walkthrough=rel, title=w.title, stage=stage)
+    out = Brief(codewalk=rel, title=w.title, stage=stage)
     for t in w.threads:
         about = [r.key for r in w.refs if r.kind in ("embed", "proposal") and t.about_line is not None and t.about_line <= r.line < t.line]
         for rq in t.open_requests:
@@ -87,12 +87,12 @@ MAY_WRITE = {
 # r[impl prd.stage]
 # r[impl prd.stage-gate]
 def as_markdown(briefs: list[Brief]) -> str:
-    """For an agent to read: each walkthrough with anything in hand, and what to do.
+    """For an agent to read: each codewalk with anything in hand, and what to do.
 
     Parameters
     ----------
     briefs : list of Brief
-        One per walkthrough; those with nothing in hand are left out.
+        One per codewalk; those with nothing in hand are left out.
 
     Returns
     -------
@@ -104,7 +104,7 @@ def as_markdown(briefs: list[Brief]) -> str:
     if not todo:
         return "\n".join(lines + ["Nothing: every reference resolves, no questions are open and no proposals are waiting.", ""])
     for b in todo:
-        lines += [f"## {b.title}", "", f"`{b.walkthrough}`", ""]
+        lines += [f"## {b.title}", "", f"`{b.codewalk}`", ""]
         if b.stage:
             lines += [f"A PRD at the **{b.stage}** stage: {MAY_WRITE[b.stage]}", ""]
         sections = [

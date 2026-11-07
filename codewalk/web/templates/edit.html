@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block crumb %}<a href="/">Walkthroughs</a> / <a href="/{{ 'spec' if spec else 'walk' }}/{{ rel }}">{{ rel }}</a> / edit{% endblock %}
+{% block crumb %}<a href="/">Codewalks</a> / <a href="/{{ 'spec' if spec else 'walk' }}/{{ rel }}">{{ rel }}</a> / edit{% endblock %}
 {% block actions %}
   <span class="save-state" id="save-state">Saved</span>
   <button class="tb" data-action="sync" id="sync-toggle" title="Scroll the Markdown and the preview together">Linked scrolling</button>

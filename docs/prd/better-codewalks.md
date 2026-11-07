@@ -2,9 +2,9 @@
 title: "Better codewalks"
 summary: "A codewalk explains code and a PRD changes it; words that aren't always terms; and the margin and the code beside the page staying out of the way."
 kind: prd
-stage: code
+stage: work
 tags: [ui, prd]
-related: ["authoring-prds.md", "../walkthrough.md"]
+related: ["authoring-prds.md", "../codewalk.md"]
 ---
 
 # Better codewalks
