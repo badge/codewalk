@@ -377,6 +377,13 @@ a.req.cite code { background: var(--ok-soft) !important; color: var(--ok); }
 .layout.with-context .prose.spec, .preview .prose.spec { grid-template-columns: minmax(0, 1fr) 260px; gap: 18px; }
 .spec-doc { min-width: 0; }
 .margin { position: relative; }
+/* Reading, the margin is a pane of its own beside the document, scrolled to follow it */
+.layout .prose.spec > .margin {
+  position: sticky; top: 48px; align-self: start; height: calc(100vh - 48px); min-height: 0 !important;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin;
+}
+.layout .prose.spec > .margin .mgroup { left: 3px; right: 3px; }
+.mspacer { position: absolute; left: 0; width: 1px; pointer-events: none; }
 .mgroup { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; gap: 8px; transition: top .15s; }
 .mcard { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 0 10px 10px 0; padding: 8px 10px; font-size: 12.5px; }
 .mcard.state-ok { border-left-color: var(--ok); }
@@ -441,6 +448,10 @@ a.term.fact { color: var(--warn); }
 .gl-uses { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
 .gl-uses a { margin-left: 8px; font-family: var(--mono); font-size: 12px; }
 .gl-uses.none { color: var(--warn); }
+.gl-group h2.folder-name { font: 600 20px/1.3 var(--serif); color: var(--ink); margin: 30px 0 10px; }
+.gl-group h2 a { color: inherit; text-decoration: none; }
+.gl-uses { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 0; }
+.gl-group h2 .where { margin-left: 8px; font-family: var(--mono); font-size: 12px; font-weight: normal; color: var(--muted); }
 
 /* ---- A walkthrough's margin: the requirements beside the code, with their prose -------- */
 

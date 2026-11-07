@@ -21,7 +21,8 @@ it can be found.
 
 Cite either explicitly with `[[t:deadband]]` and `[[f:ercot.settlement-periods]]`, or as
 links, `[the deadband](term:deadband)` and `[periods](fact:ercot.settlement-periods)`.
-Tracey ignores both kinds of line; it only reads `r[...]`.
+Each is defined in the spec it belongs to, so the spec reads complete on its own. We
+assume tracey passes over both kinds of line (`f[tracey.other-markers]`, not yet checked).
 """
 
 from __future__ import annotations

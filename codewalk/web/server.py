@@ -257,6 +257,7 @@ class App:
         ]
         return {"file": rel, "lines": highlight_lines(path), "outline": outline, "zed": f"zed://file/{path}"}
 
+    # r[impl term.glossary]
     def glossary_page(self) -> str:
         g = self.ctx.glossary
         # Where each is cited or mentioned, across the walkthroughs and specs
@@ -274,18 +275,29 @@ class App:
                     if rel not in uses.setdefault(f"t:{tid}", []):
                         uses[f"t:{tid}"].append(rel)
 
-        def view(rel: str) -> str:
-            return "spec" if rel in self.ctx.spec_paths() else "walk"
+        specs = set(self.ctx.spec_paths())
 
-        terms = sorted(g.terms.values(), key=lambda d: d.id)
-        facts = sorted(g.facts.values(), key=lambda d: (("documented", "observed", "assumed").index(d.status or "assumed"), d.id))
+        def view(rel: str) -> str:
+            return "spec" if rel in specs else "walk"
+
+        groups = []
+        for rel in {d.file for d in [*g.terms.values(), *g.facts.values()]}:
+            w = Walk(self.ctx, rel)
+            terms = sorted((d for d in g.terms.values() if d.file == rel), key=lambda d: d.id)
+            facts = sorted(
+                (d for d in g.facts.values() if d.file == rel),
+                key=lambda d: (("documented", "observed", "assumed").index(d.status or "assumed"), d.id),
+            )
+            # Specs first, as the index lists them: by folder, then lighter first; then the rest
+            order = (rel not in specs, rel.split("/")[:-1], w.meta.weight is None, w.meta.weight or 0, w.title.lower())
+            groups.append((order, {"rel": rel, "title": w.title, "view": view(rel), "terms": terms, "facts": facts}))
         return self.page(
             "glossary.html",
             "Glossary",
             "glossary",
             {},
-            terms=terms,
-            facts=facts,
+            groups=[grp for _, grp in sorted(groups, key=lambda x: x[0])],
+            counts=(len(g.terms), len(g.facts)),
             uses=uses,
             view_of=view,
             slug=_slug,

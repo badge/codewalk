@@ -38,7 +38,8 @@ that doesn't exist yet as `[[r:id]]`, and write it. Tracey still checks coverage
 
 **Terms and facts.** Define a word with a meaning of its own here as `t[word]` and
 something we rely on about the world as `f[id] documented|observed|assumed`, each on its
-own line with its text after, in the glossary or where it's most at home. Cite them with
+own line with its text after, under `## Terms` or `## Facts` in the spec it belongs to
+(the top-level spec, for words used throughout). Cite them with
 `[[t:word]]` and `[[f:id]]`. Don't mark a fact documented or observed unless it is.
 
 **Never** mark code reviewed (that's a person's to do), resolve a question a person asked

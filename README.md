@@ -11,8 +11,7 @@ codewalk is written about in codewalk:
   walkthrough to the page in the browser.
 - [Its data model](docs/data_model.md): the things it knows about and how they relate.
 - [Its spec](docs/spec/README.md): what it must do, as prose and the requirements that
-  follow from it.
-- [Its glossary](docs/glossary.md): the words it uses with a meaning of their own.
+  follow from it, with the words each part uses defined beside it.
 
 Every example below names codewalk's own code, and a test checks each one still
 resolves.
@@ -160,7 +159,8 @@ excerpt of several in a block puts the question directly under it. Notes from th
 are signed with `author` from `codewalk.toml`, or the first word of git's `user.name`.
 
 **Terms and facts** are defined like tracey's requirements, a marker on its own line and
-the text after; tracey ignores them. From [codewalk's glossary](docs/glossary.md):
+the text after, in the spec they belong to. From codewalk's
+[walkthroughs spec](docs/spec/walkthroughs.md) and [specs spec](docs/spec/specs.md):
 
 ```markdown
 t[excerpt]
@@ -224,7 +224,8 @@ or `m`, puts the margin away.
   go to its line, or click a suggestion to use it. Cmd+S or Ctrl+S saves.
 - **Live.** A page updates when its walkthrough, the code or the review file changes.
   Edit in your own editor and the page keeps up.
-- **The glossary,** at `/glossary`: every term and fact, where it's defined and used.
+- **The glossary,** at `/glossary`: every term and fact, grouped by the spec that
+  defines it, with where each is used.
 
 ## Reviewing
 

@@ -507,8 +507,8 @@ Renderer::text
 Glossary::mentions
 ```
 
-The glossary page lists every term and fact, with where each is used, and a fact that
-nothing cites stands out.
+The glossary page lists every term and fact, grouped by the spec that defines it, with
+where each is used, and a fact that nothing cites stands out.
 
 ## 15. In your editor: the language server
 

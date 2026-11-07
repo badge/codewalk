@@ -3,32 +3,36 @@
 {% block body %}
 <main class="index glossary">
   <h1>Glossary</h1>
-  <p class="lede">What words mean here, and what we know about the world. Each is defined where it's
-    most at home, with <code>t[id]</code> or <code>f[id]</code> on a line of its own, and cited with
-    <code>[[t:id]]</code> or <code>[[f:id]]</code>. A term's mentions in prose are linked to it.</p>
+  <p class="lede">What words mean here, and what we know about the world:
+    {{ counts[0] }} term{{ "" if counts[0] == 1 else "s" }} and {{ counts[1] }} fact{{ "" if counts[1] == 1 else "s" }}.
+    Each is defined in the spec it belongs to, with <code>t[id]</code> or <code>f[id]</code> on a line
+    of its own, and cited with <code>[[t:id]]</code> or <code>[[f:id]]</code>. A term's mentions in
+    prose are linked to it.</p>
   <input class="filter" id="gl-filter" placeholder="Filter terms and facts" spellcheck="false" autocomplete="off">
 
-  <h2 class="folder-name">terms ({{ terms | length }})</h2>
-  {% for d in terms %}
-  <div class="gl-item" id="t-{{ slug(d.id) }}" data-search="{{ (d.id ~ ' ' ~ d.text) | lower }}">
-    <div class="gl-head"><span class="kind k-term">term</span><b>{{ d.words }}</b>
-      <span class="spacer"></span><a class="where" href="/{{ view_of(d.file) }}/{{ d.file }}#t-{{ slug(d.id) }}">{{ d.file }}:{{ d.line }}</a></div>
-    <div class="gl-text">{{ text(d.text) }}</div>
-    {% set u = uses.get("t:" ~ d.id, []) %}
-    {% if u %}<div class="gl-uses">Used in {% for r in u %}<a href="/{{ view_of(r) }}/{{ r }}">{{ r }}</a>{% endfor %}</div>{% endif %}
-  </div>
-  {% else %}<p class="empty">No terms yet.</p>{% endfor %}
-
-  <h2 class="folder-name">facts ({{ facts | length }})</h2>
-  {% for d in facts %}
-  <div class="gl-item" id="f-{{ slug(d.id) }}" data-search="{{ (d.id ~ ' ' ~ d.text ~ ' ' ~ d.status) | lower }}">
-    <div class="gl-head"><span class="kind k-fact">fact</span><b>{{ d.id }}</b><span class="status s-{{ d.status }}">{{ d.status }}</span>
-      <span class="spacer"></span><a class="where" href="/{{ view_of(d.file) }}/{{ d.file }}#f-{{ slug(d.id) }}">{{ d.file }}:{{ d.line }}</a></div>
-    <div class="gl-text">{{ text(d.text) }}</div>
-    {% set u = uses.get("f:" ~ d.id, []) %}
-    {% if u %}<div class="gl-uses">Relied on in {% for r in u %}<a href="/{{ view_of(r) }}/{{ r }}">{{ r }}</a>{% endfor %}</div>
-    {% else %}<div class="gl-uses none">Nothing cites it yet</div>{% endif %}
-  </div>
-  {% else %}<p class="empty">No facts yet.</p>{% endfor %}
+  {% for grp in groups %}
+  <section class="gl-group">
+    <h2 class="folder-name"><a href="/{{ grp.view }}/{{ grp.rel }}">{{ grp.title }}</a> <span class="where">{{ grp.rel }}</span></h2>
+    {% for d in grp.terms %}
+    <div class="gl-item" id="t-{{ slug(d.id) }}" data-search="{{ (d.id ~ ' ' ~ d.text) | lower }}">
+      <div class="gl-head"><span class="kind k-term">term</span><b>{{ d.words }}</b>
+        <span class="spacer"></span><a class="where" href="/{{ grp.view }}/{{ d.file }}#t-{{ slug(d.id) }}">{{ d.file }}:{{ d.line }}</a></div>
+      <div class="gl-text">{{ text(d.text) }}</div>
+      {% set u = uses.get("t:" ~ d.id, []) %}
+      {% if u %}<div class="gl-uses">Used in {% for r in u %}<a href="/{{ view_of(r) }}/{{ r }}">{{ r }}</a>{% endfor %}</div>{% endif %}
+    </div>
+    {% endfor %}
+    {% for d in grp.facts %}
+    <div class="gl-item" id="f-{{ slug(d.id) }}" data-search="{{ (d.id ~ ' ' ~ d.text ~ ' ' ~ d.status) | lower }}">
+      <div class="gl-head"><span class="kind k-fact">fact</span><b>{{ d.id }}</b><span class="status s-{{ d.status }}">{{ d.status }}</span>
+        <span class="spacer"></span><a class="where" href="/{{ grp.view }}/{{ d.file }}#f-{{ slug(d.id) }}">{{ d.file }}:{{ d.line }}</a></div>
+      <div class="gl-text">{{ text(d.text) }}</div>
+      {% set u = uses.get("f:" ~ d.id, []) %}
+      {% if u %}<div class="gl-uses">Relied on in {% for r in u %}<a href="/{{ view_of(r) }}/{{ r }}">{{ r }}</a>{% endfor %}</div>
+      {% else %}<div class="gl-uses none">Nothing cites it yet</div>{% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% else %}<p class="empty">No terms or facts yet.</p>{% endfor %}
 </main>
 {% endblock %}

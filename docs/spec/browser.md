@@ -18,12 +18,31 @@ and how much is reviewed; and the specs, as a tree of their folders
 lighter first, then those without one, by title (`ui.weight`). Clicking a name, in prose or in the code shown, opens its file beside the
 walkthrough, at the symbol, with an outline of the file (`ui.context`).
 
+The margin, beside a walkthrough or a spec file, is a pane of its own: it scrolls by
+itself, and follows the page, keeping the cards for what's in the middle of the window
+beside it, even when cards above have piled up. Opening a spec for one requirement lines
+its card up with the prose citing it (`ui.margin`).
+
 ### Editing
 
 Editing shows the Markdown and its preview side by side, scrolling together, and each
 keeps your place: open the editor from what you're reading, and you're at the same
 place, and the same going back (`ui.place`). The panes scroll; the page doesn't
 (`ui.edit-panes`). Typing `[[`, or in a `walk` block, completes names.
+
+## Terms
+
+t[weight]
+A number in a walkthrough's or spec file's front matter saying where it goes in its
+folder: lighter first, then those without one, by title.
+
+t[spec-view]
+A spec file as the browser shows it: its prose, with each requirement the prose cites in
+the margin beside it, and what's uncited, missing or drifted.
+
+t[margin]
+The column beside a page in the browser: for a walkthrough, its trail, block by block;
+for a spec file, the requirements its prose cites.
 
 ## Requirements
 
@@ -51,6 +70,11 @@ r[ui.context]
 Clicking a name in prose, or in shown code where the name is a symbol in the same file
 or the only symbol with that name, MUST open the symbol's file beside the page, scrolled
 to and highlighting the symbol.
+
+r[ui.margin]
+Reading a walkthrough or spec file, the margin MUST scroll on its own, and as the page
+scrolls it MUST keep the cards for the prose at the middle of the window beside that
+prose. A spec view opened for a requirement MUST show its card beside the prose citing it.
 
 r[ui.place]
 Moving between reading and editing MUST keep the first line of Markdown in view.

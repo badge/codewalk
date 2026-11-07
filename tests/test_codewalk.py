@@ -796,6 +796,24 @@ def test_a_term_defined_twice_is_an_error_where_its_defined(repo):
     assert any("defined again" in p.message for p in w.problems())
 
 
+# r[verify term.glossary]
+def test_the_glossary_groups_terms_by_the_spec_defining_them(repo):
+    from starlette.testclient import TestClient
+
+    from codewalk.web.server import make_app
+
+    (repo / "docs/spec/spec.md").write_text(SPEC + "\n## Terms\n\nt[deadband]\nHow far import can rise.\n")
+    (repo / "docs/spec/top.md").write_text("---\nweight: 0\n---\n# Top\n\nt[site]\nA place with a meter.\n\nf[meter.rate] observed\nMeters read every 15 minutes.\n")
+    (repo / "docs/walk.md").write_text("# Walk\n\nThe deadband at a site, by [[MARGIN]].\n")
+    client = TestClient(make_app(ctx(repo), watch=False))
+    page = client.get("/glossary").text
+    top, spec = page.index('href="/spec/docs/spec/top.md">Top'), page.index('href="/spec/docs/spec/spec.md">')
+    assert top < page.index('id="t-site"') < page.index('id="f-meter-rate"') < spec < page.index('id="t-deadband"')
+    assert 'href="/spec/docs/spec/spec.md#t-deadband"' in page and 'href="/walk/docs/walk.md">docs/walk.md' in page
+    # A term's mention links to its definition, in the spec that defines it
+    assert 'href="/spec/docs/spec/spec.md#t-deadband"' in client.get("/walk/docs/walk.md").text
+
+
 # ---- The language server -------------------------------------------------------------------
 
 

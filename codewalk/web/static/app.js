@@ -360,20 +360,74 @@
   }
   if (data.margin) toggleMargin(store.get("codewalk-margin") === "off");
 
+  // Each group of cards beside the prose citing it, or below the group before it if that's
+  // in the way. Reading a page, the margin is its own pane, scrolled to follow the prose:
+  // see `followMargin`.
+  let marginRows = []; // [the prose's top, how far below it its cards are], in the document's terms
+  let focusCard = null; // the card you came for, which `followMargin` lines up rather than its group
   function layoutMargin() {
     const margin = $("#margin");
     const doc = $(".spec-doc");
     if (!margin || !doc) return;
     const base = doc.getBoundingClientRect().top;
     let floor = 0;
+    marginRows = [];
     for (const g of $$(".mgroup", margin)) {
       const anchor = $(`.spec-doc [data-md="${g.dataset.anchor}"]`);
       const want = anchor ? anchor.getBoundingClientRect().top - base : floor;
       const top = Math.max(want, floor);
       g.style.top = `${top}px`;
       floor = top + g.offsetHeight + 10;
+      if (anchor) marginRows.push([want, top - want + (focusCard && g.contains(focusCard) ? focusCard.offsetTop : 0)]);
     }
     margin.style.minHeight = `${floor}px`;
+    // Room below the last card, so the margin can scroll it up beside prose near the end
+    $(".mspacer", margin)?.remove();
+    if (getComputedStyle(margin).position === "sticky") {
+      const spacer = margin.appendChild(Object.assign(document.createElement("div"), { className: "mspacer" }));
+      Object.assign(spacer.style, { top: `${floor}px`, height: `${innerHeight}px` });
+    }
+    followMargin();
+  }
+  // r[impl ui.margin]
+  // Scroll the margin so the cards for the prose in the middle of the screen are beside it:
+  // each group lined up with its prose until the next is near, then easing to the next's
+  // offset, so it keeps up as the page scrolls. Scrolled itself, it stays where it's put
+  // until the page scrolls.
+  let marginHeld = null; // [a card, the block it's held beside], or true once scrolled by hand
+  function followMargin() {
+    const margin = $("#margin");
+    const doc = $(".spec-doc");
+    if (Array.isArray(marginHeld)) return holdMargin(...marginHeld);
+    if (marginHeld || !margin || !doc || !marginRows.length || getComputedStyle(margin).position !== "sticky") return;
+    const d = doc.getBoundingClientRect().top;
+    const reading = ($(".topbar").getBoundingClientRect().bottom + innerHeight) / 2 - d;
+    const EASE = 160;
+    let bias = marginRows[0][1];
+    for (let i = 0; i < marginRows.length; i++) {
+      const [a, b] = marginRows[i];
+      if (reading < a) {
+        if (i > 0) {
+          const [a0, b0] = marginRows[i - 1];
+          const from = Math.max(a0, a - EASE);
+          bias = reading <= from ? b0 : b0 + ((b - b0) * (reading - from)) / Math.max(1, a - from);
+        }
+        break;
+      }
+      bias = b;
+    }
+    margin.scrollTop = margin.getBoundingClientRect().top - d + bias;
+  }
+  // Line one card up with a block of the document, and keep it there until the page scrolls
+  function holdMargin(card, beside) {
+    const margin = $("#margin");
+    if (!margin || !card || !beside || getComputedStyle(margin).position !== "sticky") return;
+    margin.scrollTop += card.getBoundingClientRect().top - beside.getBoundingClientRect().top;
+    marginHeld = [card, beside];
+  }
+  addEventListener("scroll", followMargin, { passive: true });
+  for (const kind of ["wheel", "touchstart", "keydown", "mousedown"]) {
+    addEventListener(kind, (e) => { marginHeld = e.target.closest?.("#margin") ? true : null; }, { passive: true, capture: true });
   }
   addEventListener("resize", layoutMargin);
   addEventListener("load", layoutMargin);
@@ -436,16 +490,19 @@
   }
   const startLine = +new URLSearchParams(location.search).get("line") || 0;
   const chosen = new URLSearchParams(location.search).get("req");
+  const chosenCard = data.view === "spec" && chosen ? $(`#margin [data-req-card="${CSS.escape(chosen)}"]`) : null;
+  focusCard = chosenCard;
   layoutMargin();
   if (data.view === "spec" && chosen) {
     // Came for a requirement: light it, and the prose citing it, until you click away
-    const card = $(`#margin [data-req-card="${CSS.escape(chosen)}"]`);
+    const card = chosenCard;
     const anchor = card ? +card.closest(".mgroup").dataset.anchor : 0;
     const prose = startLine ? blockAt(startLine) : anchor ? blockAt(anchor) : null;
     const def = $(`.req-def[data-req-def="${CSS.escape(chosen)}"]`);
     [card, prose, def].forEach((el) => el?.classList.add("chosen"));
     const to = prose || def;
     if (to) { to.scrollIntoView({ block: "center" }); to.classList.add("flash-block"); }
+    if (prose) holdMargin(card, prose);
   } else if (startLine && (data.view === "walk" || data.view === "spec")) {
     const el = blockAt(startLine);
     if (el) { el.scrollIntoView({ block: "start" }); scrollBy(0, -64); }
@@ -458,6 +515,7 @@
     f?.addEventListener("input", () => {
       const q = f.value.trim().toLowerCase();
       $$(".gl-item").forEach((i) => { i.hidden = q && !i.dataset.search.includes(q); });
+      $$(".gl-group").forEach((g) => { g.hidden = !g.querySelector(".gl-item:not([hidden])"); });
     });
     if (location.hash) document.getElementById(location.hash.slice(1))?.classList.add("flash-block");
   }

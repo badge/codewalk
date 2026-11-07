@@ -29,7 +29,7 @@ What's true once this is done, in terms someone can check.
 The prose this change gives rise to, citing each requirement it adds or changes as
 `[[r:new.requirement.id]]` until the requirement is written, and as the ID in backticks
 once it is. Define new words as terms and anything we rely on about the world as facts
-(`t[word]`, `f[id] assumed`), in the glossary.
+(`t[word]`, `f[id] assumed`), in the spec they belong to.
 
 ## The code
 

@@ -52,6 +52,37 @@ Marking code reviewed is a person's to do (`review.people`).
 A walkthrough exports to plain Markdown, with each excerpt written out as it stands and
 linked to its file, for anywhere codewalk isn't (`export.plain`).
 
+## Terms
+
+t[reference]
+A name for code in a walkthrough: inline, as `[[Name]]` or a `walk:` link, or on a line
+of its own in a `walk` block. It resolves to one symbol, or it's broken.
+
+t[qualified-name]
+A symbol's full name: the path to it and then its own name, with `::` between, as
+`codewalk::walk::doc::Walk::problems`. A Python module's dotted path is written the same
+way.
+
+t[excerpt]
+The code a line of a `walk` block shows: a symbol as it stands in its file, all of it,
+part of it (`> text`), or its outline (`sig`).
+
+t[broken]
+A reference that names no symbol, or more than one, or a link to a Markdown file that
+isn't there. `codewalk check` fails on one. A proposal's name, not written yet, is in
+hand instead.
+
+t[review]
+A person's record of having read an excerpt: the digest and text of its code as it was,
+in `codewalk.review.json`. Once the code's digest differs, the excerpt has changed since
+its review.
+
+## Facts
+
+f[markdown-it.token-types] observed
+markdown-it-py's token types (`fence`, `paragraph_open`) are plain strings it makes up as
+it parses, with no enum of its own. Observed in markdown-it-py 3, November 2026.
+
 ## Requirements
 
 r[walk.what]
