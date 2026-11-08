@@ -96,11 +96,11 @@ worth recording about how the PRD got where it is can be written there too, by h
 
 ## Terms
 
-t[prd]
+r[term.prd]
 A codewalk with `kind: prd` that proposes a change in stages, from the problem to the
 code, and reads on its own.
 
-t[stage]
+r[term.stage]
 Where a PRD is in its lifecycle: the problem, the prose, the spec, the code or the work,
 recorded in its front matter as `stage`.
 
@@ -144,7 +144,7 @@ or against the spec's definition of the same ID as changed, and not as part of t
 
 r[prd.check]
 `codewalk check` MUST check each PRD's requirements and definitions, reporting the errors
-`prd.compare` and `term.errors` describe with their file and line, and exiting non-zero on
+`prd.compare` and `glossary.errors` describe with their file and line, and exiting non-zero on
 one, as it does for a broken reference.
 
 r[prd.start]

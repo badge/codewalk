@@ -23,7 +23,7 @@ VERSION = r"(?:\+([1-9][0-9]*))?"
 # A requirement's marker in code: a prefix, then `[impl id]` or `[verify id]`, with the
 # version it names after the ID, `+N`, if it isn't 1
 MARKER = re.compile(rf"\b([a-z][a-z0-9]*)\[(impl|verify)\s+({ID}){VERSION}\]")
-# `t` and `f` are the glossary's
+# Never a requirement's prefix: kept for `[[t:…]]` and `[[f:…]]` citations
 RESERVED = {"t", "f"}
 
 

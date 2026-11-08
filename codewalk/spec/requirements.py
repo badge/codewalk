@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from codewalk.spec import tracey
+from codewalk.spec import terms, tracey
 
 
 class Requirement(BaseModel):
@@ -47,7 +47,8 @@ def parse(rel: str, text: str, prefixes: set[str], removals: bool = False) -> li
     lines = text.split("\n")
     for i, line in enumerate(lines):
         m = REQ.match(line)
-        if not m or m.group(1) not in prefixes or (m.group(4) and not removals):
+        # A term or a fact is written as one, but isn't one (`glossary.define`)
+        if not m or m.group(1) not in prefixes or (m.group(4) and not removals) or m.group(2).startswith(terms.KINDS):
             continue
         body = []
         for nxt in lines[i + 1 :]:

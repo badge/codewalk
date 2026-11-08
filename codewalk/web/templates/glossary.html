@@ -5,7 +5,7 @@
   <h1>Glossary</h1>
   <p class="lede">What words mean here, and what we know about the world:
     {{ counts[0] }} term{{ "" if counts[0] == 1 else "s" }} and {{ counts[1] }} fact{{ "" if counts[1] == 1 else "s" }}.
-    Each is defined in the spec it belongs to, with <code>t[id]</code> or <code>f[id]</code> on a line
+    Each is defined in the spec it belongs to, with <code>r[term.id]</code> or <code>r[fact.id]</code> on a line
     of its own, and cited with <code>[[t:id]]</code> or <code>[[f:id]]</code>. A term's mentions in
     prose are linked to it.</p>
   <input class="filter" id="gl-filter" placeholder="Filter terms and facts" spellcheck="false" autocomplete="off">

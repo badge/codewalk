@@ -36,15 +36,15 @@ editor (`ui.edit-margin`).
 
 ## Terms
 
-t[weight]
+r[term.weight]
 A number in a codewalk's or spec file's front matter saying where it goes in its
 folder: lighter first, then those without one, by title.
 
-t[spec-view]
+r[term.spec-view]
 A spec file as the browser shows it: its prose, with each requirement the prose cites in
 the margin beside it, and what's uncited, missing or drifted.
 
-t[margin]
+r[term.margin]
 The column beside a page in the browser: for a codewalk, its trail, block by block;
 for a spec file, the requirements its prose cites.
 

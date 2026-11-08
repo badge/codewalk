@@ -37,66 +37,69 @@ comes from (`spec.trail`).
 
 ### Terms and facts
 
-A word with a meaning of its own here is a term, `t[word]`, and something relied on about
-the world is a fact, `f[id]`, with how it's known: documented, observed or assumed. A term
-whose word is often used in its ordinary sense is defined as cited only,
-`t[word] cited-only` (`term.define`). Each is defined in the spec it belongs to, under its own heading before
+A word with a meaning of its own here is a term, and something relied on about the world
+is a fact, with how it's known: documented, observed or assumed. Each is written as a
+requirement is, with an ID under `term.` or `fact.`: `r[term.word]`, or
+`r[fact.id] observed`. A term whose word is often used in its ordinary sense is defined
+as cited only, `r[term.word] cited-only` (`glossary.define`). Tracey allows one prefix
+in a spec ([[f:tracey.one-prefix]]), so a marker of their own would stop it reading the
+spec at all; written this way, tracey reads them as requirements, never implemented, and
+codewalk doesn't. Each is defined in the spec it belongs to, under its own heading before
 the requirements, so a spec reads complete on its own; those that run through all of
 codewalk are in its top-level spec. They're cited like requirements, and a term is also
 found wherever its words appear in prose, and linked to where it's defined, unless it's
-cited only, when it's linked only where it's cited (`term.cite`). One defined twice in the spec, or cited and not defined, is an error; a
-[[t:prd]] defining one is proposing it, not defining it twice (`term.errors`).
+cited only, when it's linked only where it's cited (`glossary.cite`). One defined twice in the spec, or cited and not defined, is an error; a
+[[t:prd]] defining one is proposing it, not defining it twice (`glossary.errors`).
 The glossary collects them all, by the spec that defines each, with where each is used
-(`term.glossary`).
+(`glossary.page`).
 
 ## Terms
 
-t[term]
-A word with a meaning of its own here, defined as `t[word]` in the spec it belongs to.
+r[term.term]
+A word with a meaning of its own here, defined as `r[term.word]` in the spec it belongs to.
 Its words, singular or plural, are linked to it wherever they appear in prose.
 
-t[fact]
-Something about the world we rely on and don't control, defined as `f[id]` with how it's
+r[term.fact]
+Something about the world we rely on and don't control, defined as `r[fact.id]` with how it's
 known: documented, observed or assumed. What rests on it cites it, so when one turns out
 wrong, what's affected can be found.
 
-t[prefix]
+r[term.prefix]
 The name before the brackets of a requirement's marker: `r`, or the name of the spec
-it's in, in tracey's config. `t` and `f` are kept for terms and facts.
+it's in, in tracey's config. `t` and `f` are kept for citing terms and facts.
 
-t[trace]
+r[term.trace]
 A comment in the code naming a requirement, `r[impl id]` or `r[verify id]`, on the
 symbol it's in or directly above.
 
-t[citation]
+r[term.citation]
 Where prose names a requirement, term or fact: a requirement's ID in backticks,
 `[[r:id]]`, `[[t:id]]` or `[[f:id]]`, or a `req:`, `term:` or `fact:` link.
 
-t[drift]
+r[term.drift]
 A requirement or the prose citing it having changed since the two were last reconciled,
 so one may no longer say what the other does. Reconciling records both as they stand.
 
-t[trail]
+r[term.trail]
 The path from a block of a codewalk to the requirements it proposes, implements,
 verifies or cites, and from each of those to the prose in its spec it comes from.
 
-t[glossary]
+r[term.glossary]
 Every term and fact on one page, grouped by the spec that defines each, with where each
 is used.
 
 ## Facts
 
-f[tracey.prefix] documented
+r[fact.tracey.prefix] documented
 tracey infers a spec's prefix, the `r` in `r[id]`, from the requirement markers in its
 files, rather than from the spec's name. (tracey's documentation, on configuration.)
 
-f[tracey.other-markers] assumed
-tracey passes over a line `t[id]` or `f[id]` in a spec file, so terms and facts can sit
-beside requirements. Probably not so: its documentation says any lowercase alphanumeric
-prefix is a requirement marker, inferred from a spec's files ([[f:tracey.prefix]]), so it
-likely reads them as requirements of specs called `t` and `f`. Not checked by running it.
+r[fact.tracey.one-prefix] observed
+tracey refuses a spec whose files use more than one prefix, and then reads no spec at
+all: a spec with `r[…]`, `t[…]` and `f[…]` lines stops the whole config loading
+([[f:tracey.prefix]]). Seen with tracey 2.0.0-rc.0.
 
-f[tracey.versions] documented
+r[fact.tracey.versions] documented
 A requirement's ID can carry a version, `r[id+2]`; without one it's version 1. When a
 requirement's text changes its version is bumped, and code naming an older version,
 `r[impl id]`, is stale, and not counted as covered until it's updated and its marker
@@ -138,22 +141,23 @@ A codewalk's margin MUST show, beside each block, the requirements it proposes,
 implements, verifies or cites, and each MUST link to its spec at the prose that cites it,
 or at the requirement if no prose does.
 
-r[term.define+2]
-A line consisting only of `t[id]` or `f[id]`, optionally followed, for a fact, by
-documented, observed or assumed, or, for a term, by `cited-only`, MUST be read as the
-definition of a term or fact, with the paragraph after it as its text.
+r[glossary.define]
+A line consisting only of `prefix[term.id]` or `prefix[fact.id]`, where prefix is a
+requirement's, optionally followed, for a fact, by documented, observed or assumed, or,
+for a term, by `cited-only`, MUST be read as the definition of the term or fact `id`,
+with the paragraph after it as its text, and not as a requirement.
 
-r[term.cite+2]
+r[glossary.cite]
 `[[t:id]]`, `[[f:id]]`, and links with the `term:` and `fact:` schemes MUST be read as
 citations, and a term's words in prose SHOULD be linked to it the first time in each
 paragraph, unless it's defined `cited-only`, when it MUST be linked only where it's cited.
 
-r[term.errors+2]
+r[glossary.errors]
 A term or fact defined more than once in the spec, or cited and defined neither in the
 spec nor in the PRD citing it, MUST be reported as an error. A PRD's definition of one the
 spec defines isn't a second definition.
 
-r[term.glossary]
+r[glossary.page]
 The glossary page MUST list every term and fact, grouped by the file that defines it,
 spec files first in the order the index lists them, each linked to its definition and to
 the codewalks and spec files that cite or mention it.

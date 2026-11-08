@@ -53,32 +53,32 @@ and what it's about (`context.brief`).
 
 ## Terms
 
-t[note]
+r[term.note]
 A paragraph in a blockquote that starts with its kind, `[!question]`, `[!answer]`,
 `[!decision]`, `[!note]`, `[!request]` or `[!done]`, and optionally who it's from.
 
-t[thread]
+r[term.thread]
 The notes in one blockquote: questions, answers, decisions, requests and what was done,
 with replies nested under the note they refine. It's about the block above it, and it's
 open while any note in it, at any depth, is open.
 
-t[request]
+r[term.request]
 A note asking for something that applies throughout rather than once. It stays open
 until a done after it.
 
-t[proposal]
+r[term.proposal]
 Code drafted in a `walk proposed` block under the name it will have, before it's
 written. Once written, it's settled: the block keeps the draft beside the code.
 
-t[settled]
+r[term.settled]
 Finished with: a thread when nothing in it is open, and a proposal when its block is
 `walk settled`, keeping the draft beside the code as it was written.
 
-t[in-hand]
+r[term.in-hand]
 Begun and not finished: an open question or request, a proposal not written or not
 settled, or code changed since its review. `codewalk context` says what's in hand.
 
-t[changelog]
+r[term.changelog]
 The `## Changelog` section at the end of a codewalk, where settled threads go, one
 line each, newest first.
 

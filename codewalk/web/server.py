@@ -284,7 +284,7 @@ class App:
         ]
         return {"file": rel, "lines": highlight_lines(path), "outline": outline, "zed": f"zed://file/{path}"}
 
-    # r[impl term.glossary]
+    # r[impl glossary.page]
     def glossary_page(self) -> str:
         g = self.ctx.glossary
         # Where each is cited or mentioned, across the codewalks and specs
