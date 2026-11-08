@@ -1,16 +1,19 @@
 """Terms and facts: what words mean here, and what we know about the world.
 
-Both are defined the way tracey defines requirements, a marker on its own line and then
-the text, so they sit in the same files and read the same way:
+Both are defined as tracey's requirements are, with IDs of their own under `term.` and
+`fact.`, so they sit in the same files, read the same way, and tracey reads the spec
+whole (it allows one prefix in a spec: `fact.tracey.one-prefix`):
 
-    t[deadband]
+    r[term.deadband]
     How far above its target a site's import can rise before we act.
 
-    f[ercot.settlement-periods] observed
+    r[fact.ercot.settlement-periods] observed
     ERCOT judges a dispatch in 15-minute settlement periods, aligned to the clock.
 
+Tracey counts them as requirements, never implemented; codewalk doesn't.
+
 A **term** is a word with a meaning of its own here. Its ID is the word, with hyphens for
-spaces (`t[settlement-period]`); a mention of the word in prose, or its plural, is linked
+spaces (`r[term.settlement-period]`); a mention of the word in prose, or its plural, is linked
 to it, so a reader can hover any use of it for what it means.
 
 A **fact** is something about the world we rely on and don't control: an API's
@@ -21,8 +24,7 @@ it can be found.
 
 Cite either explicitly with `[[t:deadband]]` and `[[f:ercot.settlement-periods]]`, or as
 links, `[the deadband](term:deadband)` and `[periods](fact:ercot.settlement-periods)`.
-Each is defined in the spec it belongs to, so the spec reads complete on its own. We
-assume tracey passes over both kinds of line (`f[tracey.other-markers]`, not yet checked).
+Each is defined in the spec it belongs to, so the spec reads complete on its own.
 """
 
 from __future__ import annotations
@@ -35,7 +37,15 @@ from pydantic import BaseModel
 
 # A PRD's front matter: its definitions are its own proposals, not the glossary's
 PRD = re.compile(r"\A---\n(?:.*\n)*?kind:[ \t]*[\"']?prd[\"']?[ \t]*\n(?:.*\n)*?---", re.MULTILINE)
-DEF_LINE = re.compile(r"^(t|f)\[([a-z0-9][a-z0-9.\-]*)\](?:[ \t]+(documented|observed|assumed|cited-only))?[ \t]*$")
+# `r[term.id]` or `r[fact.id]`, or with a spec's name for `r`, and what's known of it
+DEF_LINE = re.compile(
+    r"^[a-z][a-z0-9]*\[(?P<kind>term|fact)\.(?P<id>[a-z0-9][a-z0-9.\-]*)\]"
+    r"(?:[ \t]+(?P<mod>documented|observed|assumed|cited-only))?[ \t]*$"
+)
+# Any marker line: a definition's text ends at the next
+MARKER_LINE = re.compile(r"^[a-z][a-z0-9]*\[")
+# The IDs requirements can't have, being terms' and facts'
+KINDS = ("term.", "fact.")
 STATUSES = ("documented", "observed", "assumed")
 
 
@@ -44,7 +54,7 @@ class Definition(BaseModel):
     id: str
     # How a fact is known; None for a term
     status: Literal["documented", "observed", "assumed"] | None = None
-    # A term linked only where it's cited, `t[id] cited-only`, since its word is often used
+    # A term linked only where it's cited, `r[term.id] cited-only`, since its word is often used
     # in its ordinary sense
     cited_only: bool = False
     file: str
@@ -57,7 +67,7 @@ class Definition(BaseModel):
         return self.id.replace("-", " ")
 
 
-# r[impl term.define+2]
+# r[impl glossary.define]
 def parse(rel: str, text: str) -> list[Definition]:
     """The terms and facts defined in one file's text, in order.
 
@@ -79,16 +89,16 @@ def parse(rel: str, text: str) -> list[Definition]:
             continue
         body = []
         for nxt in lines[i + 1 :]:
-            if not nxt.strip() or DEF_LINE.match(nxt) or nxt.startswith("r["):
+            if not nxt.strip() or MARKER_LINE.match(nxt):
                 break
             body.append(nxt.strip())
-        kind = "term" if m.group(1) == "t" else "fact"
+        kind, mod = m["kind"], m["mod"]
         # `cited-only` is a term's; a fact's status is one of the others
-        if kind == "fact" and m.group(3) == "cited-only":
+        if kind == "fact" and mod == "cited-only":
             continue
-        status = (m.group(3) or "assumed") if kind == "fact" else None
-        cited_only = m.group(3) == "cited-only"
-        out.append(Definition(kind=kind, id=m.group(2), status=status, cited_only=cited_only, file=rel, line=i + 1, text=" ".join(body)))
+        status = (mod or "assumed") if kind == "fact" else None
+        cited_only = mod == "cited-only"
+        out.append(Definition(kind=kind, id=m["id"], status=status, cited_only=cited_only, file=rel, line=i + 1, text=" ".join(body)))
     return out
 
 
@@ -119,8 +129,8 @@ class Glossary:
         self._pattern: re.Pattern | None = None
         self.refresh()
 
-    # r[impl term.define+2]
-    # r[impl term.errors+2]
+    # r[impl glossary.define]
+    # r[impl glossary.errors]
     # r[impl prd.terms]
     def refresh(self) -> bool:
         paths = sorted({p for g in self.globs for p in self.root.glob(g) if p.is_file() and p.suffix == ".md"})
@@ -162,7 +172,7 @@ class Glossary:
         kind, _, rid = ref.partition(":")
         return (self.terms if kind == "t" else self.facts if kind == "f" else {}).get(rid)
 
-    # r[impl term.cite+2]
+    # r[impl glossary.cite]
     def mentions(self) -> re.Pattern | None:
         """A pattern for every term as it's written in prose, but those cited only.
 

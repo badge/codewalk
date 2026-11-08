@@ -65,9 +65,10 @@ lang        = letter , { letter | digit } ;
 Each is a paragraph whose first line is the marker alone, the text following:
 
 ```ebnf
-requirement = "r[" , id , "]" , NL , text ;                     (* tracey's; codewalk only reads them *)
-term        = "t[" , id , "]" , NL , text ;
-fact        = "f[" , id , "]" , [ " " , status ] , NL , text ;
+requirement = prefix , "[" , id , "]" , NL , text ;               (* tracey's; codewalk only reads them *)
+term        = prefix , "[term." , id , "]" , [ " cited-only" ] , NL , text ;
+fact        = prefix , "[fact." , id , "]" , [ " " , status ] , NL , text ;
+prefix      = "r" | the name of a spec in tracey's config ;     (* a requirement's ID never starts term. or fact. *)
 status      = "documented" | "observed" | "assumed" ;            (* assumed if left out *)
 ```
 

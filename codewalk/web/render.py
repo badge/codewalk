@@ -23,7 +23,7 @@ from markupsafe import Markup
 
 from codewalk.code.highlight import highlight_lines, highlight_text
 from codewalk.code.index import Symbol
-from codewalk.spec import tracey
+from codewalk.spec import terms, tracey
 from codewalk.spec.requirements import Requirement
 from codewalk.spec.terms import DEF_LINE, Definition
 from codewalk.walk.doc import Ref, Walk, embed_line
@@ -367,7 +367,7 @@ class Renderer:
         env["defining"] = did
         body = md.renderer.renderInline(inline.children or [], md.options, env)
         env["defining"] = None
-        body = re.sub(r"^[tf]\[[^\]]+\][^\n<]*\s*", "", body)
+        body = re.sub(r"^[a-z][a-z0-9]*\[(?:term|fact)\.[^\]]+\][^\n<]*\s*", "", body)
         if d:
             self.note_definition(d)
         change = self.prd.get(env["line"])
@@ -404,7 +404,7 @@ class Renderer:
             c=c, slug=_slug(c.id), line=env["line"], body=Markup(body), words=word_diff(c.was or "", c.text)
         )
 
-    # r[impl term.cite+2]
+    # r[impl glossary.cite]
     def text(self, tokens, idx, options, env) -> str:
         """Plain text, with the first mention of each term in a paragraph linked to it."""
         content = html.escape(tokens[idx].content)
@@ -661,6 +661,8 @@ class Renderer:
                 and k + 1 < len(tokens)
                 and (m := re.match(rf"^([a-z][a-z0-9]*)\[({tracey.ID}){tracey.VERSION}\]", tokens[k + 1].content))
                 and m.group(1) in self.ctx.spec.prefixes
+                # A term or a fact is written as a requirement, and rendered as a definition below
+                and not m.group(2).startswith(terms.KINDS)
             ):
                 # A requirement: rendered by `requirement_def` from its inline token
                 parts[-1] += self.requirement_def(tracey.key(m.group(1), m.group(2)), tok, tokens[k + 1], env)
@@ -689,7 +691,7 @@ class Renderer:
                 continue
             if tok.type == "paragraph_open" and k + 1 < len(tokens) and (m := DEF_LINE.match(tokens[k + 1].content.split("\n")[0])):
                 # A term or a fact: rendered by `definition_def`
-                parts[-1] += self.definition_def(m.group(1), m.group(2), tok, tokens[k + 1], env)
+                parts[-1] += self.definition_def(m["kind"][0], m["id"], tok, tokens[k + 1], env)
                 tokens[k + 1].type = "_done"
                 skip_close = True
                 continue

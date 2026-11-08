@@ -68,8 +68,8 @@ Requirement
 
 ## Terms and facts: Definition
 
-The [[Glossary]] holds each [[Definition]], a term or a fact, from `t[id]` and `f[id]`
-lines in any Markdown file.
+The [[Glossary]] holds each [[Definition]], a term or a fact, from `r[term.id]` and
+`r[fact.id]` lines in any Markdown file.
 
 ```walk
 Definition

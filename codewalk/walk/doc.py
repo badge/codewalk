@@ -347,7 +347,7 @@ class Walk:
             self.links.append(target)
 
     # r[impl ref.forms]
-    # r[impl term.cite+2]
+    # r[impl glossary.cite]
     def _collect(self) -> None:
         for tok in self.tokens:
             if tok.type == "front_matter":
@@ -546,7 +546,7 @@ class Walk:
     # r[impl check.links]
     # r[impl check.strict]
     # r[impl proposal.pending]
-    # r[impl term.errors+2]
+    # r[impl glossary.errors]
     # r[impl proposal.draft+2]
     def problems(self) -> list[Problem]:
         out = []

@@ -96,7 +96,7 @@ removed.
 
 Terms and facts work the same way: a PRD's definition of a word the spec already defines is
 a proposed change to it, shown against it, not a second definition (`prd.terms`,
-`term.errors`). This PRD has one: a
+`glossary.errors`). This PRD has one: a
 [[t:prd]] is no longer "a walkthrough whose code is all proposed", but a walkthrough with
 `kind: prd` that proposes a change in stages, from the problem to the code, and reads on
 its own. (It's written here rather than as a definition, since until this is done a
@@ -203,14 +203,14 @@ r[prd.terms]
 A term or fact defined in a PRD MUST be read as a definition the PRD proposes: shown as new,
 or against the spec's definition of the same ID as changed, and not as part of the spec.
 
-r[term.errors+2]
+r[glossary.errors]
 A term or fact defined more than once in the spec, or cited and defined neither in the
 spec nor in the PRD citing it, MUST be reported as an error. A PRD's definition of one the
 spec defines isn't a second definition.
 
 r[prd.check]
 `codewalk check` MUST check each PRD's requirements and definitions, reporting the errors
-`prd.compare` and `term.errors` describe with their file and line, and exiting non-zero on
+`prd.compare` and `glossary.errors` describe with their file and line, and exiting non-zero on
 one, as it does for a broken reference.
 
 ### Its code
@@ -524,7 +524,7 @@ def parse(rel: str, text: str, prefixes: set[str], removals: bool = False) -> li
 
 ```walk settled python
 terms::parse
-# r[impl term.define]
+# r[impl glossary.define]
 def parse(rel: str, text: str) -> list[Definition]:
     """The terms and facts defined in one file's text, in order."""
 ```
@@ -600,7 +600,7 @@ def prd_problems(self) -> list[Problem]:
     return out
 ```
 
-A term cited in a PRD and defined in it isn't undefined (`term.errors+2`): resolving a
+A term cited in a PRD and defined in it isn't undefined (`glossary.errors`): resolving a
 `[[t:…]]` looks in the PRD's own definitions after the glossary. The PRD's page shows each
 requirement, term and fact where it's written, marked new, changed, removed, quoted or in
 error, with the spec's text against it where there is one.
@@ -786,7 +786,7 @@ def test_a_prds_requirements_are_new_changed_removed_quoted_or_in_error_against_
 
 ```walk settled python
 test_a_term_a_prd_redefines_or_defines_and_cites_is_not_an_error
-# r[verify term.errors+2]
+# r[verify glossary.errors]
 def test_a_term_a_prd_redefines_or_defines_and_cites_is_not_an_error(repo): ...
 ```
 
@@ -834,13 +834,13 @@ def test_starting_a_prd_from_the_index_writes_it_with_what_was_asked(client, rep
 
 ## Terms
 
-t[stage]
+r[term.stage]
 Where a PRD is in its lifecycle: the problem, the prose, the spec, the code or the work,
 recorded in its front matter as `stage`.
 
 ## Facts
 
-f[tracey.versions] documented
+r[fact.tracey.versions] documented
 A requirement's ID can carry a version, `r[id+2]`; without one it's version 1. When a
 requirement's text changes its version is bumped, and code naming an older version,
 `r[impl id]`, is stale, and not counted as covered until it's updated and its marker
@@ -853,7 +853,7 @@ bumped. (tracey's documentation, on versioning.)
 What was asked here and how it was settled, newest first.
 
 - 2026-11-07 (the work): The prose and requirements moved into the spec
-  ([PRDs](../spec/prds.md), with `spec.prefix+2`, `spec.traces+2` and `term.errors+2` in
+  ([PRDs](../spec/prds.md), with `spec.prefix+2`, `spec.traces+2` and `glossary.errors` in
   [Specs and terms](../spec/specs.md) and `proposal.change` in
   [the conversation](../spec/conversation.md)); the code and its tests written, and every
   proposal settled, with where the code departs from its outline in a note under

@@ -784,21 +784,21 @@ def test_a_spec_renders_its_requirements_as_anchors_with_their_code(repo):
 GLOSSARY = """\
 # Glossary
 
-t[deadband]
+r[term.deadband]
 How far above its target import can rise before we act.
 
-t[settlement-period]
+r[term.settlement-period]
 A 15-minute period.
 
-f[market.periods] observed
+r[fact.market.periods] observed
 Markets settle every 15 minutes.
 
-f[market.guess]
+r[fact.market.guess]
 Something we suppose.
 """
 
 
-# r[verify term.define+2]
+# r[verify glossary.define]
 def test_terms_and_facts_are_defined_like_requirements(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY)
     g = ctx(repo).glossary
@@ -808,8 +808,18 @@ def test_terms_and_facts_are_defined_like_requirements(repo):
     assert g.terms["deadband"].text == "How far above its target import can rise before we act."
 
 
-# r[verify term.cite+2]
-# r[verify term.errors+2]
+# r[verify glossary.define]
+def test_terms_and_facts_are_not_requirements_and_take_a_specs_prefix(repo):
+    defs = "\nr[term.deadband]\nHow far import can rise.\n\nr[fact.meter.rate] observed\nMeters read every 15 minutes.\n"
+    (repo / "docs/spec/spec.md").write_text(SPEC + defs)
+    c = ctx(repo)
+    assert not {k for k in c.spec.requirements if "term." in k or "fact." in k}
+    assert c.glossary.terms["deadband"].text == "How far import can rise."
+    assert c.glossary.facts["meter.rate"].status == "observed"
+
+
+# r[verify glossary.cite]
+# r[verify glossary.errors]
 def test_terms_are_cited_and_mentioned_and_unknown_ones_are_errors(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY)
     w = walk(repo, "# W\n\nThe deadband, the deadband, and [[t:deadband]] and [[f:market.periods]] and [[t:nope]].\n")
@@ -819,32 +829,32 @@ def test_terms_are_cited_and_mentioned_and_unknown_ones_are_errors(repo):
     assert 'class="term fact"' in body and set(data["terms"]) == {"t:deadband", "f:market.periods"}
 
 
-# r[verify term.cite+2]
+# r[verify glossary.cite]
 # r[verify note.syntax]
 def test_a_note_whose_kind_is_a_term_is_still_a_note(repo):
-    (repo / "docs/glossary.md").write_text("# G\n\nt[note]\nA paragraph in a blockquote.\n\nt[request]\nA standing ask.\n")
+    (repo / "docs/glossary.md").write_text("# G\n\nr[term.note]\nA paragraph in a blockquote.\n\nr[term.request]\nA standing ask.\n")
     w = walk(repo, "# W\n\n> [!note] A thought.\n\nThen:\n\n> [!request] @m: Keep it short.\n")
     assert [t.notes[0].kind for t in w.threads] == ["note", "request"]
     body, _ = render(w)
     assert "A thought." in body and "Keep it short." in body and "[!" not in body
 
 
-# r[verify term.errors+2]
+# r[verify glossary.errors]
 def test_a_term_defined_twice_is_an_error_where_its_defined(repo):
-    (repo / "docs/glossary.md").write_text(GLOSSARY + "\nt[deadband]\nAgain.\n")
+    (repo / "docs/glossary.md").write_text(GLOSSARY + "\nr[term.deadband]\nAgain.\n")
     w = Walk(ctx(repo), "docs/glossary.md")
     assert any("defined again" in p.message for p in w.problems())
 
 
-# r[verify term.glossary]
+# r[verify glossary.page]
 def test_the_glossary_groups_terms_by_the_spec_defining_them(repo):
     from starlette.testclient import TestClient
 
     from codewalk.web.server import make_app
 
-    (repo / "docs/spec/spec.md").write_text(SPEC + "\n## Terms\n\nt[deadband]\nHow far import can rise.\n")
+    (repo / "docs/spec/spec.md").write_text(SPEC + "\n## Terms\n\nr[term.deadband]\nHow far import can rise.\n")
     (repo / "docs/spec/top.md").write_text(
-        "---\nweight: 0\n---\n# Top\n\nt[site]\nA place with a meter.\n\nf[meter.rate] observed\nMeters read every 15 minutes.\n"
+        "---\nweight: 0\n---\n# Top\n\nr[term.site]\nA place with a meter.\n\nr[fact.meter.rate] observed\nMeters read every 15 minutes.\n"
     )
     (repo / "docs/walk.md").write_text("# Walk\n\nThe deadband at a site, by [[MARGIN]].\n")
     client = TestClient(make_app(ctx(repo), watch=False))
@@ -854,6 +864,9 @@ def test_the_glossary_groups_terms_by_the_spec_defining_them(repo):
     assert 'href="/spec/docs/spec/spec.md#t-deadband"' in page and 'href="/walk/docs/walk.md">docs/walk.md' in page
     # A term's mention links to its definition, in the spec that defines it
     assert 'href="/spec/docs/spec/spec.md#t-deadband"' in client.get("/walk/docs/walk.md").text
+    # In the spec itself it's a definition, not a requirement
+    spec_page = client.get("/spec/docs/spec/spec.md").text
+    assert 'id="t-deadband"' in spec_page and 'id="r-term-deadband"' not in spec_page
 
 
 # ---- The language server -------------------------------------------------------------------
@@ -1213,14 +1226,14 @@ r[hold.margin+2] removed
 r[hold.margin]
 Hold a margin back.
 
-t[deadband]
+r[term.deadband]
 How far import can rise before we act.
 
-t[site]
+r[term.site]
 A place with a meter.
 """
 
-GLOSSARY_DEADBAND = "# G\n\nt[deadband]\nHow far import can rise.\n"
+GLOSSARY_DEADBAND = "# G\n\nr[term.deadband]\nHow far import can rise.\n"
 
 
 def prd(repo: Path, text: str, rel: str = "docs/prd/x.md") -> Walk:
@@ -1280,7 +1293,7 @@ def test_a_prds_requirements_are_new_changed_removed_quoted_or_in_error_against_
     assert "without a new version" in body and "which the spec doesn&#39;t have" in body
 
 
-# r[verify term.errors+2]
+# r[verify glossary.errors]
 def test_a_term_a_prd_redefines_or_defines_and_cites_is_not_an_error(repo):
     (repo / "docs/glossary.md").write_text(GLOSSARY_DEADBAND)
     w = prd(repo, PRD.format(stage="spec") + "\nA [[t:site]] has a [[t:deadband]].\n")
@@ -1443,10 +1456,12 @@ def test_a_prd_started_from_a_thread_and_the_thread_link_to_each_other(client, r
     assert bad.status_code == 409 and not (repo / "docs/prd/other.md").exists()
 
 
-# r[verify term.define+2]
-# r[verify term.cite+2]
+# r[verify glossary.define]
+# r[verify glossary.cite]
 def test_a_cited_only_term_is_linked_only_where_its_cited(repo):
-    (repo / "docs/glossary.md").write_text("# G\n\nt[target] cited-only\nWhat a site aims for.\n\nf[odd] cited-only\nNot a fact.\n")
+    (repo / "docs/glossary.md").write_text(
+        "# G\n\nr[term.target] cited-only\nWhat a site aims for.\n\nr[fact.odd] cited-only\nNot a fact.\n"
+    )
     g = ctx(repo).glossary
     assert g.terms["target"].cited_only and "odd" not in g.facts
     w = walk(repo, "# W\n\nThe target moves, and a [[t:target]] is set.\n")

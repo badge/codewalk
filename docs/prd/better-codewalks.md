@@ -86,9 +86,9 @@ thirty requirements for a word would bury the changes that matter. The term
 
 ### Words that aren't always terms
 
-A term can be defined as cited only, `t[target] cited-only` (`term.define+2`): it's linked
+A term can be defined as cited only, `t[target] cited-only` (`glossary.define`): it's linked
 where it's cited, `[[t:target]]`, and nowhere else, so its word can be used in its
-ordinary sense (`term.cite+2`). That's what `codewalk` needs too, as a term, since it's
+ordinary sense (`glossary.cite`). That's what `codewalk` needs too, as a term, since it's
 also the tool's name: it's defined below as cited only, which codewalk can't read until
 this is done, so until then the definition shows as text.
 
@@ -122,12 +122,13 @@ is started, a note MUST be added to the thread, signed as the person, linking to
 
 ### Words that aren't always terms
 
-r[term.define+2]
-A line consisting only of `t[id]` or `f[id]`, optionally followed, for a fact, by
-documented, observed or assumed, or, for a term, by `cited-only`, MUST be read as the
-definition of a term or fact, with the paragraph after it as its text.
+r[glossary.define]
+A line consisting only of `prefix[term.id]` or `prefix[fact.id]`, where prefix is a
+requirement's, optionally followed, for a fact, by documented, observed or assumed, or,
+for a term, by `cited-only`, MUST be read as the definition of the term or fact `id`,
+with the paragraph after it as its text, and not as a requirement.
 
-r[term.cite+2]
+r[glossary.cite]
 `[[t:id]]`, `[[f:id]]`, and links with the `term:` and `fact:` schemes MUST be read as
 citations, and a term's words in prose SHOULD be linked to it the first time in each
 paragraph, unless it's defined `cited-only`, when it MUST be linked only where it's cited.
@@ -298,8 +299,8 @@ def test_a_prd_started_from_a_thread_and_the_thread_link_to_each_other(client, r
 
 ```walk settled python
 test_a_cited_only_term_is_linked_only_where_its_cited
-# r[verify term.define+2]
-# r[verify term.cite+2]
+# r[verify glossary.define]
+# r[verify glossary.cite]
 def test_a_cited_only_term_is_linked_only_where_its_cited(repo): ...
 ```
 
@@ -311,7 +312,7 @@ def test_the_editor_can_put_the_margin_away(client, repo): ...
 
 ## Terms
 
-t[codewalk] cited-only
+r[term.codewalk] cited-only
 A Markdown file that explains a part of the code, naming it rather than copying it, and
 holds the conversation about it: a PRD is a codewalk that proposes a change. (What
 codewalk has called a walkthrough.)

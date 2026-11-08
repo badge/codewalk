@@ -158,15 +158,17 @@ Write notes in the Markdown, or from the browser: **Ask** on an excerpt, **Answe
 excerpt of several in a block puts the question directly under it. Notes from the browser
 are signed with `author` from `codewalk.toml`, or the first word of git's `user.name`.
 
-**Terms and facts** are defined like tracey's requirements, a marker on its own line and
-the text after, in the spec they belong to. From codewalk's
+**Terms and facts** are defined as tracey's requirements, with IDs under `term.` and
+`fact.`, a marker on its own line and the text after, in the spec they belong to. Tracey
+counts them as requirements that are never implemented; codewalk reads them as
+definitions. From codewalk's
 [codewalks spec](docs/spec/codewalks.md) and [specs spec](docs/spec/specs.md):
 
 ```markdown
-t[excerpt]
+r[term.excerpt]
 The code a line of a `walk` block shows: a symbol as it stands in its file.
 
-f[tracey.prefix] documented
+r[fact.tracey.prefix] documented
 tracey infers a spec's prefix, the `r` in `r[id]`, from the requirement markers in its files.
 ```
 
