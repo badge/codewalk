@@ -273,7 +273,7 @@ def ask(text: str, after_line: int, author: str | None, body: str, kind: Kind = 
     return "\n".join(lines[:at] + block + lines[at:])
 
 
-# r[impl prd.start]
+# r[impl prd.start+2]
 def request(text: str, author: str | None, body: str) -> str:
     """`text` with a standing request under its first heading, where it's read first.
 

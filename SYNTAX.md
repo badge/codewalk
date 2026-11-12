@@ -12,7 +12,8 @@ This is the grammar, in EBNF, of what's added. `TEXT` is any characters but newl
 ```ebnf
 name        = [ "crate::" ] , segment , { "::" , segment }      (* a tail of a qualified name *)
             | "impl " , [ path , " for " ] , path               (* an impl block *)
-            | file , "#" , name ;                               (* a name in a file; any tail of its path *)
+            | file , "#" , name                                 (* a name in a file; any tail of its path *)
+            | file ;                                            (* a file, as a whole; has a "/" or "." *)
 path        = segment , { "::" , segment } ;
 segment     = ( letter | "_" ) , { letter | digit | "_" } ;
 file        = { TEXT - "#" } ;
@@ -22,7 +23,9 @@ lower       = "a" … "z" ;
 ```
 
 A name resolves if exactly one symbol's qualified name ends with it on `::` boundaries.
-`crate::` anchors it at the root. Requirement, term and fact IDs are case-sensitive.
+`crate::` anchors it at the root. A file is a symbol too, whose qualified name is its
+module path; a crate's root has none, and is named by its path. A `name` has no `/` or
+`.` in it, so a reference that does, with no `#`, is a `file`. Requirement, term and fact IDs are case-sensitive.
 
 ## References in prose
 
@@ -51,12 +54,13 @@ headings or links.
 ```ebnf
 walk        = "```walk" , NL , { walk-line , NL } , "```" ;
 walk-line   = blank | "//" , TEXT
-            | ( name | "r:" , id ) , [ " > " , focus ] , [ " sig" ] ;
-focus       = TEXT ;                    (* the first line of the symbol containing it starts the part shown *)
+            | ( name | "r:" , id ) , [ " > " , focus ] , [ " sig" ]
+            | ( "t:" | "f:" ) , id ;            (* a term or fact: its whole definition *)
+focus       = TEXT ;                    (* the first line of the symbol containing it starts the part shown, which runs to the end of the statement or block that line starts *)
 
-proposal    = "```walk proposed" , [ " " , lang ] , NL , name , NL , { TEXT , NL } , "```" ;
-settled     = "```walk settled" , [ " " , lang ] , NL , walk-line , NL , { TEXT , NL } , "```" ;
-                                        (* a proposal, written: the code shown, the draft kept *)
+proposal    = "```walk proposed" , [ " change" ] , [ " " , lang ] , NL , name , NL , { TEXT , NL } , "```" ;
+settled     = "```walk settled" , [ " change" ] , [ " " , lang ] , NL , walk-line , NL , { TEXT , NL } , "```" ;
+                                        (* a proposal, written: the code shown, the draft kept; "change" if it changed code that was there *)
 lang        = letter , { letter | digit } ;
 ```
 
@@ -101,6 +105,7 @@ summary: …        # else the first paragraph
 tags: [a, b]      # or one, as a string
 related: [path]   # other codewalks, from this file
 kind: prd         # a PRD: a change proposed in full, settled as it's made
+at: walks/v1      # read the code at this ref, a tag best, not as it is
 ---
 ```
 

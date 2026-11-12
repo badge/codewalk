@@ -71,6 +71,25 @@ class ReviewState:
         self.data.setdefault(doc, {})[ref] = Reviewed(digest=digest, text=text)
         self.save()
 
+    # r[impl review.reopen]
+    def forget(self, doc: str, ref: str) -> bool:
+        """Drop the review of one reference, so it reads as not reviewed.
+
+        Returns
+        -------
+        bool
+            Whether there was one to drop.
+        """
+        self.load()
+        entries = self.data.get(doc, {})
+        if ref not in entries:
+            return False
+        del entries[ref]
+        if not entries:
+            del self.data[doc]
+        self.save()
+        return True
+
     def forget_missing(self, doc: str, refs: set[str]) -> None:
         """Drop what's recorded for references the codewalk no longer makes.
 

@@ -14,11 +14,14 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import os
 import re
 import threading
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import uvicorn
 import watchfiles
@@ -29,12 +32,19 @@ from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, S
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
+from codewalk.code import worktrees
 from codewalk.code.highlight import highlight_lines
+from codewalk.code.index import CodeIndex
 from codewalk.spec import prose, trail
 from codewalk.walk import notes, prd
-from codewalk.walk.doc import STAGES, Context, Walk, set_front_matter, settle
+from codewalk.walk.doc import STAGES, Context, Walk, set_front_matter, settle, unsettle
 from codewalk.walk.library import Library
-from codewalk.web.render import _slug, diff_rows, page_data_json, render, requirement_html, templates
+from codewalk.web.render import BASE, _slug, base, diff_rows, page_data_json, render, requirement_html, templates
+
+if TYPE_CHECKING:
+    from codewalk.web.workspace import Workspace
+
+log = logging.getLogger(__name__)
 
 STATES = {
     "never": ("not reconciled", "No one has said this and its prose agree yet"),
@@ -86,10 +96,17 @@ class App:
     ----------
     ctx : Context
         The project.
+    base : str
+        The path its pages are under: empty for a server of one project, `/p/<name>` for
+        one of a workspace's.
+    workspace : Workspace or None
+        The workspace it's one of, if any.
     """
 
-    def __init__(self, ctx: Context):
+    def __init__(self, ctx: Context, base: str = "", workspace: Workspace | None = None):
         self.ctx = ctx
+        self.base = base
+        self.workspace = workspace
         self.lock = threading.Lock()
         self.subscribers: set[asyncio.Queue[Change]] = set()
         # Set when the server's asked to stop, so the pages' event streams end: the server
@@ -98,9 +115,18 @@ class App:
 
     # ---- Pages ----------------------------------------------------------------------
 
+    # r[impl ui.project]
     def page(self, template: str, title: str, view: str, data: dict, **context) -> str:
+        projects = self.workspace.names() if self.workspace else []
         return templates.get_template(template).render(
-            title=title, view=view, data_json=page_data_json({"view": view, **data}), static=static_url, **context
+            title=title,
+            view=view,
+            data_json=page_data_json({"view": view, "base": base(), **data}),
+            static=static_url,
+            projects=projects,
+            project=self.base.removeprefix("/p/"),
+            branch=self.ctx.worktrees.branch if self.ctx.worktrees else None,
+            **context,
         )
 
     def index_page(self) -> str:
@@ -149,6 +175,8 @@ class App:
         """
         w = Walk(self.ctx, rel, text)
         body, data = render(w)
+        if w.ctx.pin:
+            data["at"] = w.ctx.pin.ref
         views: dict[str, prose.SpecView] = {}
         groups: dict[int, list[dict]] = {}
         for link in trail.links(w):
@@ -158,7 +186,7 @@ class App:
                 # The whole card goes to the spec, at the prose it comes from if there is some
                 o = trail.origin(self.ctx, link.id, views)
                 at = o if o and o.prose else req
-                card["href"] = card["go"] = f"/spec/{at.file}?line={at.line}&req={link.id}"
+                card["href"] = card["go"] = f"{base()}/spec/{at.file}?line={at.line}&req={link.id}"
                 card["text"] = requirement_html(req.text)
             else:
                 card.update({"href": "#", "text": None, "state": "missing", "state_label": "not in the spec yet"})
@@ -169,6 +197,7 @@ class App:
         data["margin"] = True
         return html, data, w
 
+    # r[impl pin.label]
     def walk_page(self, rel: str) -> str:
         body, data, w = self.walk_body(rel)
         problems = w.problems()
@@ -186,6 +215,7 @@ class App:
             summary=library.get(rel),
             titles=library.titles(),
             stages=STAGES,
+            pin=w.ctx.pin,
             errors=sum(1 for p in problems if p.severity == "error"),
             changed=sum(1 for p in problems if p.severity == "warning"),
         )
@@ -235,7 +265,8 @@ class App:
             else:
                 card["href"], card["text"] = "#", None
             card["uses"] = [
-                {"href": f"/walk/{u.codewalk}?line={u.line}", "title": u.title, "role": self.ROLES[u.role]} for u in used.get(c.id, [])
+                {"href": f"{base()}/walk/{u.codewalk}?line={u.line}", "title": u.title, "role": self.ROLES[u.role]}
+                for u in used.get(c.id, [])
             ]
             groups.setdefault(c.lines[0], []).append(card)
         html = templates.get_template("spec_body.html").render(body=body, groups=sorted(groups.items()))
@@ -265,13 +296,32 @@ class App:
 
     # ---- API ------------------------------------------------------------------------
 
-    def file_view(self, rel: str) -> dict:
-        path = (self.ctx.root / rel).resolve()
-        if self.ctx.root not in path.parents or not path.is_file():
+    # r[impl serve.files]
+    def pinned(self, at: str | None) -> Context:
+        """The project, or it read at a pinned codewalk's ref."""
+        if not at:
+            return self.ctx
+        if (ctx := self.ctx.at(at)) is None:
+            raise FileNotFoundError(f"`{at}` names no commit")
+        return ctx
+
+    # r[impl pin.everywhere]
+    def file_view(self, rel: str, at: str | None = None) -> dict:
+        # A source can be outside the root (`../other/src/**/*.rs`), or read from a branch's
+        # worktree or from git at a pin, so one the index read is shown wherever it's read from
+        index = self.pinned(at).index
+        indexed = index.has_file(rel)
+        if indexed and index.on_disk(rel) is None:
+            return self._file_view(index, rel, index.highlighted(rel), None)
+        path = (index.where(rel) if indexed else self.ctx.root / rel).resolve()
+        if not path.is_file() or (self.ctx.root not in path.parents and not indexed):
             raise FileNotFoundError(rel)
+        return self._file_view(index, rel, highlight_lines(path), f"zed://file/{path}")
+
+    def _file_view(self, index: CodeIndex, rel: str, lines: list[str], zed: str | None) -> dict:
         outline = [
             {
-                "ref": self.ctx.index.shortest_unique(s),
+                "ref": index.shortest_unique(s),
                 "qualified": s.qualified,
                 "kind": s.kind,
                 "line": s.line,
@@ -279,10 +329,10 @@ class App:
                 "end": s.end,
                 "depth": s.qualified.count("::"),
             }
-            for s in sorted(self.ctx.index.in_file(rel), key=lambda s: s.line)
+            for s in sorted(index.in_file(rel), key=lambda s: s.line)
             if s.kind not in ("field", "impl")
         ]
-        return {"file": rel, "lines": highlight_lines(path), "outline": outline, "zed": f"zed://file/{path}"}
+        return {"file": rel, "lines": lines, "outline": outline, "zed": zed}
 
     # r[impl glossary.page]
     def glossary_page(self) -> str:
@@ -376,7 +426,7 @@ class App:
         body, data, w = self.walk_body(rel, text)
         return {"html": body, "data": data, "problems": [p.model_dump() for p in w.problems()], "headings": w.headings(), "title": w.title}
 
-    # r[impl serve.local]
+    # r[impl serve.local+2]
     def writable(self, rel: str) -> Path:
         """`rel`, if it's a Markdown file under the docs folders: nothing else is written.
 
@@ -490,11 +540,21 @@ class App:
     def settle(self, rel: str, line: int) -> dict:
         path = self.writable(rel)
         w = Walk(self.ctx, rel)
-        ref = next((r for r in w.refs if r.kind == "proposal" and r.line == line and r.symbol), None)
+        ref = next((r for r in w.refs if r.kind == "proposal" and r.line == line and w.made(r)), None)
         if ref is None:
             raise FileNotFoundError(f"no written proposal on line {line}")
         path.write_text(settle(w.text, line, ref.target))
         return {"settled": ref.target}
+
+    # r[impl proposal.unsettle]
+    def unsettle(self, rel: str, line: int) -> dict:
+        path = self.writable(rel)
+        w = Walk(self.ctx, rel)
+        ref = next((r for r in w.refs if r.settled and r.line == line), None)
+        if ref is None:
+            raise FileNotFoundError(f"no settled block on line {line}")
+        path.write_text(unsettle(w.text, line))
+        return {"unsettled": ref.target}
 
     # r[impl proposal.agree]
     def agree(self, rel: str, line: int, end: int, body: str) -> dict:
@@ -538,9 +598,9 @@ class App:
         path.write_text(set_front_matter(path.read_text(), "stage", stage))
         return {"stage": stage}
 
-    # r[impl prd.start]
+    # r[impl prd.start+2]
     # r[impl prd.from-thread]
-    # r[impl serve.local]
+    # r[impl serve.local+2]
     def start_prd(self, title: str, ask: str, source: str | None = None, thread: int | None = None) -> dict:
         """Start a PRD from the index, or from a thread in a codewalk, and say where to open it.
 
@@ -584,12 +644,13 @@ class App:
             path, found = origin
             note = f"Taken up in a PRD: [{title}]({os.path.relpath(rel, os.path.dirname(source))})."
             path.write_text(notes.reply(path.read_text(), found, "note", self.ctx.config.who(self.ctx.root), note))
-        return {"started": rel, "href": f"/walk/{rel}"}
+        return {"started": rel, "href": f"{base()}/walk/{rel}"}
 
     # r[impl review.people]
     def review(self, rel: str, ref: str | None) -> dict:
         w = Walk(self.ctx, rel)
-        files = self.ctx.index.files
+        # A pinned codewalk's code is as it was at its pin
+        files = w.ctx.index.files
         done = []
         for r in w.embeds:
             if r.symbol and (ref is None or r.key == ref):
@@ -598,6 +659,13 @@ class App:
         if ref is None:
             self.ctx.review.forget_missing(rel, {r.key for r in w.embeds})
         return {"reviewed": done}
+
+    # r[impl review.reopen]
+    def reopen(self, rel: str, ref: str) -> dict:
+        """Forget the review of one reference in a codewalk, so it reads as not reviewed."""
+        if not self.ctx.review.forget(rel, ref):
+            raise KeyError(f"{ref} isn't reviewed in {rel}")
+        return {"reopened": ref}
 
     # ---- Watching -----------------------------------------------------------------------
 
@@ -617,6 +685,10 @@ class App:
                     break
                 fixed.append(part)
             path = self.ctx.root.joinpath(*fixed)
+            # A source read from a branch's worktree is watched there
+            if g in self.ctx.config.sources and self.ctx.worktrees and (at := self.ctx.worktrees.where(str(Path(*fixed)) + "/")):
+                path = at
+            path = path.resolve()
             dirs.add(path if path.is_dir() else path.parent)
         # Drop any folder inside another
         return sorted(d for d in dirs if not any(o != d and o in d.parents for o in dirs))
@@ -642,30 +714,146 @@ class App:
         change = Change(code=code, docs=sorted(rels & docs), review=self.ctx.review.path.name in rels)
         return change if change.code or change.docs or change.review else None
 
+    # r[impl serve.live.settle]
+    async def catch_up(self, paths: set[str], tries: int = 5, wait: float = 0.25) -> Change | None:
+        """What a batch of changed files means for the pages, read again a moment later
+        while it can't be read.
+
+        A change caught half-made, as git makes them in a rebase, can't always be read: a
+        file goes between being found and being read, or the review file is half-written.
+        It's read again, a little later each time, and given up only for this batch, so the
+        watching carries on.
+
+        Parameters
+        ----------
+        paths : set of str
+            The files that changed, as full paths.
+        tries : int
+            How many times to read it.
+        wait : float
+            Seconds before the second try; each try after waits that much longer.
+
+        Returns
+        -------
+        Change or None
+            None if nothing a page shows has changed, or it still couldn't be read.
+        """
+        for attempt in range(1, tries + 1):
+            try:
+                return await asyncio.to_thread(self.changed, paths)
+            except Exception as e:
+                if attempt == tries:
+                    log.warning("couldn't read a change after %d tries: %s", tries, e)
+                    return None
+                await asyncio.sleep(wait * attempt)
+        return None
+
     async def watch(self, stop: asyncio.Event) -> None:
         review = self.ctx.review.path.name
+        self.loop = asyncio.get_running_loop()
 
-        async def follow(paths, recursive: bool, keep):
-            async for batch in watchfiles.awatch(*paths, recursive=recursive, debounce=120, step=40, stop_event=stop, watch_filter=keep):
-                change = await asyncio.to_thread(self.changed, {p for _, p in batch})
+        async def follow(paths, recursive: bool, keep, until: asyncio.Event):
+            async for batch in watchfiles.awatch(*paths, recursive=recursive, debounce=120, step=40, stop_event=until, watch_filter=keep):
+                change = await self.catch_up({p for _, p in batch})
                 if change:
                     for q in list(self.subscribers):
                         q.put_nowait(change)
 
-        await asyncio.gather(
-            follow(self.watched(), True, lambda _, p: p.endswith((".rs", ".py", ".md"))),
-            # The review file is at the root, which is too big to watch whole
-            follow([self.ctx.root], False, lambda _, p: Path(p).name == review),
-        )
+        # Watched afresh whenever the folders change: when a branch's worktrees are read, or
+        # no longer read
+        while not stop.is_set():
+            self.rewatch = asyncio.Event()
+            until = asyncio.Event()
+            waits = [asyncio.create_task(stop.wait()), asyncio.create_task(self.rewatch.wait())]
+
+            async def relay(waits: list[asyncio.Task], until: asyncio.Event) -> None:
+                await asyncio.wait(waits, return_when=asyncio.FIRST_COMPLETED)
+                until.set()
+
+            relay_task = asyncio.create_task(relay(waits, until))
+            await asyncio.gather(
+                follow(self.watched(), True, lambda _, p: p.endswith((".rs", ".py", ".md")), until),
+                # The review file is at the root, which is too big to watch whole
+                follow([self.ctx.root], False, lambda _, p: Path(p).name == review, until),
+            )
+            for t in [*waits, relay_task]:
+                t.cancel()
+
+    # ---- Reading a branch's worktrees ---------------------------------------------------
+
+    # r[impl review.branches]
+    def branches(self) -> dict:
+        """The branches with a worktree in any of the project's repositories, and the one
+        being read, if any."""
+        found = worktrees.branches(self.ctx.root, self.ctx.config.sources)
+        current = self.ctx.worktrees.branch if self.ctx.worktrees else None
+        return {
+            "current": current,
+            "branches": [
+                {
+                    "name": name,
+                    "repos": [c.repo.name for c in w.checkouts],
+                    "base": sorted({c.base_ref for c in w.checkouts}),
+                }
+                for name, w in found.items()
+            ],
+        }
+
+    # r[impl review.branch-code]
+    def read_branch(self, branch: str | None) -> dict:
+        """Read the project's code from a branch's worktrees, or, with None, as it is.
+
+        Nothing is written: the choice is the server's, for every page of the project.
+
+        Parameters
+        ----------
+        branch : str or None
+            The branch.
+
+        Returns
+        -------
+        dict
+            The branch now being read.
+        """
+        found = worktrees.branches(self.ctx.root, self.ctx.config.sources) if branch else {}
+        if branch and branch not in found:
+            raise KeyError(f"no worktree on {branch}")
+        self.ctx = Context(self.ctx.root, self.ctx.config, found.get(branch) if branch else None)
+        if (loop := getattr(self, "loop", None)) and (rewatch := getattr(self, "rewatch", None)):
+            loop.call_soon_threadsafe(rewatch.set)
+        return {"branch": branch}
 
 
-def make_app(ctx: Context, watch: bool = True) -> Starlette:
-    app = App(ctx)
+def make_app(ctx: Context, watch: bool = True, base: str = "", workspace: Workspace | None = None) -> Starlette:
+    """The pages and API of one project.
+
+    Parameters
+    ----------
+    ctx : Context
+        The project.
+    watch : bool
+        Whether to watch its files and refresh pages as they change.
+    base : str
+        The path it's served under: empty on its own, `/p/<name>` in a workspace.
+    workspace : Workspace or None
+        The workspace it's one of, if any.
+
+    Returns
+    -------
+    Starlette
+        The app, with its `App` as `state.app`.
+    """
+    app = App(ctx, base, workspace)
 
     def locked(fn):
         def run(*args):
             with app.lock:
-                return fn(*args)
+                # The project's links, for whatever this renders
+                token = BASE.set(app.base)
+                try:
+                    return fn(*args)
+                finally:
+                    BASE.reset(token)
 
         return run
 
@@ -692,11 +880,11 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
         return HTMLResponse(await threaded(app.edit_page, request.path_params["rel"]))
 
     async def file(request: Request):
-        return JSONResponse(await threaded(app.file_view, request.query_params["path"]))
+        return JSONResponse(await threaded(app.file_view, request.query_params["path"], request.query_params.get("at")))
 
     async def named(request: Request):
         q = request.query_params
-        s = app.ctx.index.named_at(q["name"], q["file"], int(q.get("line", 0)))
+        s = (await threaded(app.pinned, q.get("at"))).index.named_at(q["name"], q["file"], int(q.get("line", 0)))
         if s is None:
             raise FileNotFoundError(f"no one symbol called {q['name']}")
         return JSONResponse({"file": s.file, "start": s.start, "end": s.end, "line": s.line, "qualified": s.qualified})
@@ -720,6 +908,10 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
         b = await request.json()
         return JSONResponse(await threaded(app.review, b["path"], b.get("ref")))
 
+    async def reopen(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.reopen, b["path"], b["ref"]))
+
     async def note(request: Request):
         b = await request.json()
         return JSONResponse(
@@ -742,9 +934,20 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
         b = await request.json()
         return JSONResponse(await threaded(app.agree, b["path"], int(b["line"]), int(b["end"]), b["text"]))
 
+    async def branches_(request: Request):
+        return JSONResponse(await threaded(app.branches))
+
+    async def read_branch(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.read_branch, b.get("branch")))
+
     async def settle_(request: Request):
         b = await request.json()
         return JSONResponse(await threaded(app.settle, b["path"], int(b["line"])))
+
+    async def unsettle_(request: Request):
+        b = await request.json()
+        return JSONResponse(await threaded(app.unsettle, b["path"], int(b["line"])))
 
     async def events(request: Request):
         q: asyncio.Queue[Change] = asyncio.Queue()
@@ -800,8 +1003,12 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
             Route("/api/render", render_, methods=["POST"]),
             Route("/api/save", save, methods=["POST"]),
             Route("/api/review", review, methods=["POST"]),
+            Route("/api/reopen", reopen, methods=["POST"]),
             Route("/api/note", note, methods=["POST"]),
             Route("/api/settle", settle_, methods=["POST"]),
+            Route("/api/unsettle", unsettle_, methods=["POST"]),
+            Route("/api/branches", branches_),
+            Route("/api/branch", read_branch, methods=["POST"]),
             Route("/api/agree", agree, methods=["POST"]),
             Route("/api/stage", stage, methods=["POST"]),
             Route("/api/prd", start_prd, methods=["POST"]),
@@ -818,21 +1025,50 @@ def make_app(ctx: Context, watch: bool = True) -> Starlette:
 
 
 class _Server(uvicorn.Server):
-    """uvicorn's server, which tells the pages' event streams to end when it's asked to stop."""
+    """uvicorn's server, which tells the pages' event streams to end when it's asked to stop.
 
-    def __init__(self, config: uvicorn.Config, app: App):
+    Parameters
+    ----------
+    config : uvicorn.Config
+        The server's settings.
+    apps : Callable
+        The projects being served, when it's asked to stop: one, or a workspace's.
+    """
+
+    def __init__(self, config: uvicorn.Config, apps: Callable[[], list[App]]):
         super().__init__(config)
-        self.codewalk = app
+        self.apps = apps
 
     def handle_exit(self, sig, frame) -> None:
-        self.codewalk.closing = True
+        for app in self.apps():
+            app.closing = True
         super().handle_exit(sig, frame)
 
 
-# r[impl serve.local]
+# r[impl serve.local+2]
 # r[impl serve.stop]
 def serve(ctx: Context, port: int) -> None:
     starlette = make_app(ctx)
     # However the streams behave, don't wait more than a moment for them
     config = uvicorn.Config(starlette, host="127.0.0.1", port=port, log_level="warning", timeout_graceful_shutdown=2)
-    _Server(config, starlette.state.app).run()
+    _Server(config, lambda: [starlette.state.app]).run()
+
+
+# r[impl serve.local+2]
+# r[impl serve.stop]
+# r[impl serve.workspace]
+def serve_workspace(folder: Path, port: int) -> None:
+    """Serve every project in the folders one level below `folder`, at once.
+
+    Parameters
+    ----------
+    folder : Path
+        The workspace: its folders with a `codewalk.toml` are its projects.
+    port : int
+        The port to listen on, on 127.0.0.1.
+    """
+    from codewalk.web.workspace import Workspace
+
+    workspace = Workspace(folder)
+    config = uvicorn.Config(workspace.starlette, host="127.0.0.1", port=port, log_level="warning", timeout_graceful_shutdown=2)
+    _Server(config, workspace.apps).run()

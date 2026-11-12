@@ -15,13 +15,15 @@ import html
 import json
 import os
 import re
+import textwrap
+from contextvars import ContextVar
 from functools import cached_property
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 from markdown_it import MarkdownIt
 from markupsafe import Markup
 
-from codewalk.code.highlight import highlight_lines, highlight_text
+from codewalk.code.highlight import highlight_text
 from codewalk.code.index import Symbol
 from codewalk.spec import terms, tracey
 from codewalk.spec.requirements import Requirement
@@ -30,8 +32,22 @@ from codewalk.walk.doc import Ref, Walk, embed_line
 from codewalk.walk.notes import KINDS, blocks, parse_notes, threads
 from codewalk.walk.prd import SpecChange, spec_changes
 from codewalk.walk.review import diff
+from codewalk.web.docs import doc_runs, python_doc_html, rust_doc_html
 
 templates = Environment(loader=PackageLoader("codewalk.web"), autoescape=select_autoescape(), trim_blocks=True, lstrip_blocks=True)
+
+# The path the project's pages are under: nothing for a server of one project, and
+# `/p/<name>` for one of a workspace's. Set for the work done for a request.
+BASE: ContextVar[str] = ContextVar("base", default="")
+
+
+# r[impl serve.workspace-pages]
+def base() -> str:
+    """The path the current project's pages are under; empty for a server of one."""
+    return BASE.get()
+
+
+templates.globals["base"] = base
 
 
 def inline_md(text: str) -> Markup:
@@ -54,6 +70,11 @@ COMMENT = re.compile(r"\A\s*<!--.*?-->\s*\Z", re.DOTALL)
 # whose kind is also a term (`note`, `request`) is still read as one
 NOTE_MARK = re.compile(rf"^\[!(?:{'|'.join(KINDS)})\][ \t]*(?:@[\w.\-]+:?)?", re.IGNORECASE)
 _plain = MarkdownIt("commonmark")
+
+
+def definitions_table(rows: list[str]) -> str:
+    """A run of terms and facts in a `walk` block, as one table."""
+    return '<table class="definitions"><tbody>' + "".join(rows) + "</tbody></table>"
 
 
 def requirement_html(text: str) -> Markup:
@@ -103,7 +124,7 @@ def symbol_data(walk: Walk, s: Symbol) -> dict:
         "doc": s.doc,
         "details": s.details,
         "markers": s.markers,
-        "zed": f"zed://file/{walk.ctx.root / s.file}:{s.line}",
+        "zed": walk.ctx.index.zed(s.file, s.line),
     }
 
 
@@ -124,6 +145,23 @@ def path_parts(qualified: str) -> list[tuple[str, str]]:
     parts = qualified.split("::")
     split = next((i for i, part in enumerate(parts[:-1]) if part[:1].isupper()), len(parts) - 1)
     return [(p, "qual") for p in parts[:split]] + [(p, "owner") for p in parts[split:-1]] + [(parts[-1], "name")]
+
+
+# r[impl proposal.indent]
+def _draft(ref: Ref) -> str:
+    """A proposal's draft without the indentation its lines share, as its code is shown.
+
+    Parameters
+    ----------
+    ref : Ref
+        The proposal.
+
+    Returns
+    -------
+    str
+        The draft, dedented; empty if it has none.
+    """
+    return textwrap.dedent(ref.draft or "")
 
 
 def _dedent_html(line: str, n: int) -> str:
@@ -253,7 +291,7 @@ class Renderer:
             ref=ref, req=req, text=requirement_html(req.text), traces=traces, slug=_slug(req.id)
         )
 
-    # r[impl proposal.change]
+    # r[impl proposal.change+2]
     def proposal(self, ref: Ref, end: int) -> str:
         """A `walk proposed` block: the draft, or once the name exists, what was written.
 
@@ -272,20 +310,19 @@ class Renderer:
             The HTML.
         """
         files = self.ctx.index.files
-        draft_rows = [Markup(h or " ") for h in highlight_text(ref.draft or "", ref.lang)]
+        draft = _draft(ref)
+        draft_rows = [Markup(h or " ") for h in highlight_text(draft, ref.lang)]
         rows, diff = None, None
         if s := ref.symbol:
             self.symbols[ref.target] = symbol_data(self.walk, s)
-            highlighted = highlight_lines(self.ctx.root / s.file)
+            highlighted = self.ctx.index.highlighted(s.file)
             raw = files.lines(s.file)[s.start - 1 : s.end]
             indent = min((len(l) - len(l.lstrip()) for l in raw if l.strip()), default=0)
             rows = [(n, Markup(_dedent_html(highlighted[n - 1], indent) or " ")) for n in range(s.start, s.end + 1)]
             current = "\n".join(l[indent:] for l in raw)
             # A change shows what there is, then what there will be; a written proposal what
             # was planned, then what was written
-            diff = diff_rows(current, ref.draft or "", context=3) if ref.change else diff_rows(ref.draft or "", current, context=3)
-        # Taken: the name is already several symbols' (not just close to some)
-        ambiguous = len(ref.candidates) > 1 and all(c.name == ref.target.split("::")[-1] for c in ref.candidates)
+            diff = diff_rows(current, draft, context=3) if ref.change else diff_rows(draft, current, context=3)
         return templates.get_template("proposal.html").render(
             ref=ref,
             s=ref.symbol,
@@ -294,9 +331,10 @@ class Renderer:
             rows=rows,
             diff=diff,
             end=end,
-            ambiguous=ambiguous,
-            agreed=None if ref.symbol else self.walk.agreement(ref),
-            candidates=[self.ctx.index.shortest_unique(c) for c in ref.candidates] if ambiguous else [],
+            ambiguous=ref.ambiguous,
+            made=self.walk.made(ref),
+            agreed=None if self.walk.made(ref) else self.walk.agreement(ref),
+            candidates=[self.ctx.index.shortest_unique(c) for c in ref.candidates] if ref.ambiguous else [],
             zed=self.symbols[ref.target]["zed"] if ref.symbol else None,
             slug=_slug(ref.target),
         )
@@ -338,7 +376,7 @@ class Renderer:
     def definition_href(self, d: Definition) -> str:
         view = "spec" if d.file in self.specs else "walk" if d.file in self.codewalks else "glossary"
         anchor = f"{d.kind[0]}-{_slug(d.id)}"
-        return f"/glossary#{anchor}" if view == "glossary" else f"/{view}/{d.file}#{anchor}"
+        return f"{base()}/glossary#{anchor}" if view == "glossary" else f"{base()}/{view}/{d.file}#{anchor}"
 
     def definition_def(self, kind: str, did: str, para, inline, env) -> str:
         """Where a term or fact is defined.
@@ -400,8 +438,17 @@ class Renderer:
         md = self.walk.md
         body = md.renderer.renderInline(inline.children or [], md.options, env)
         body = re.sub(r"^[a-z][a-z0-9]*\[[^\]]+\][^\n<]*\s*", "", body)
+        # r[impl ui.prd-requirement]
+        # Open the PRD at it, and ask about it, as for an excerpt
+        path = (self.ctx.root / self.walk.rel).resolve()
         return templates.get_template("prd_requirement.html").render(
-            c=c, slug=_slug(c.id), line=env["line"], body=Markup(body), words=word_diff(c.was or "", c.text)
+            c=c,
+            slug=_slug(c.id),
+            line=env["line"],
+            end=para.map[1] if para.map else env["line"],
+            zed=f"zed://file/{path}:{env['line']}",
+            body=Markup(body),
+            words=word_diff(c.was or "", c.text),
         )
 
     # r[impl glossary.cite]
@@ -482,24 +529,25 @@ class Renderer:
     # ---- Embedded symbols ----------------------------------------------------------------
 
     # r[impl embed.current]
-    # r[impl ref.sig]
+    # r[impl ref.sig+2]
     # r[impl review.changed]
     def embed(self, ref: Ref) -> str:
         if ref.requirement:
             return self.requirement(ref, ref.requirement)
         if not ref.symbol:
             index = self.ctx.index
-            ambiguous = ref.candidates and all(c.name == ref.target.split("::")[-1] for c in ref.candidates)
+            if (gone := self.gone(ref)) is not None:
+                return gone
             return templates.get_template("broken.html").render(
                 ref=ref,
-                ambiguous=ambiguous,
+                ambiguous=ref.ambiguous,
                 candidates=[(index.shortest_unique(c), f"{c.file}:{c.line}") for c in ref.candidates],
             )
         s = ref.symbol
         files = self.ctx.index.files
         self.symbols[ref.key] = symbol_data(self.walk, s)
         self.note_requirements(m[1] for m in s.markers)
-        highlighted = highlight_lines(self.ctx.root / s.file)
+        highlighted = self.ctx.index.highlighted(s.file)
         # `sig`: the runs of lines its outline gives, or its doc comments and first line
         runs = (s.outline or [(s.start, s.line)]) if ref.sig else [(s.start, s.end)]
         shown = [n for a, b in runs for n in range(a, b + 1)]
@@ -509,29 +557,169 @@ class Renderer:
             self.note_requirements([tracey.key(p, rid) for p, _, rid, _ in REQ_IN_CODE.findall(line)])
         # Shown without the indent it has inside its impl, class or module
         indent = min((len(l) - len(l.lstrip()) for l in raw if l.strip()), default=0)
-        # A gap between runs is a row of its own, with no line number
-        rows = []
-        for n in shown:
-            if rows and rows[-1][0] is not None and n != rows[-1][0] + 1:
-                rows.append((None, Markup("…")))
-            rows.append((n, Markup(_dedent_html(highlighted[n - 1], indent) or " ")))
+        rows = self.code_rows(s, shown, indent, highlighted)
         more = last < s.end
         digest = s.digest(files)
         reviewed = self.ctx.review.get(self.walk.rel, ref.key)
         state = "new" if reviewed is None else ("changed" if reviewed.digest != digest else "ok")
+        branch = self.branch_change(ref, s)
         return templates.get_template("figure.html").render(
             ref=ref,
             s=s,
             rows=rows,
+            has_docs=any(r[2] == "doc" for r in rows),
             digest=digest,
             state=state,
             diff=diff_rows(reviewed.text, s.text(files)) if state == "changed" else None,
-            plan=diff_rows(ref.draft or "", "\n".join(l[indent:] for l in raw), context=3) if ref.settled else None,
+            plan=diff_rows(_draft(ref), "\n".join(l[indent:] for l in raw), context=3) if ref.settled else None,
             more=more,
             parts=path_parts(s.qualified),
             zed=self.symbols[ref.key]["zed"],
             slug=_slug(ref.key),
+            branch=branch,
         )
+
+    # r[impl review.branch-gone]
+    def gone(self, ref: Ref) -> str | None:
+        """A reference to a symbol the branch being read removed or renamed: what it was,
+        shown removed, in place of a reference that names nothing.
+
+        Parameters
+        ----------
+        ref : Ref
+            A reference that names nothing on the branch.
+
+        Returns
+        -------
+        str or None
+            The HTML; None if no branch is being read, or the name isn't a symbol that was
+            there where the branch started.
+        """
+        if not self.ctx.worktrees or ref.error or ref.ambiguous:
+            return None
+        was, _ = self.ctx.checked_out.resolve(ref.target)
+        found = self.ctx.index.at_base(was) if was else None
+        if not found or found[1] is None:
+            return None
+        base_ref, before = found
+        return templates.get_template("gone.html").render(
+            ref=ref,
+            s=was,
+            parts=path_parts(was.qualified),
+            branch=self.ctx.worktrees.branch,
+            base=base_ref,
+            rows=[{"kind": "del", "tag": "-", "text": line} for line in textwrap.dedent(before).split("\n")],
+        )
+
+    # r[impl review.branch-diff]
+    def branch_change(self, ref: Ref, s: Symbol) -> dict | None:
+        """What the branch being read changed in an embedded symbol, if one is being read.
+
+        Compared whole: an excerpt (`sig`, or a focus) is only labelled; the whole symbol,
+        changed, is shown as a diff in place of its code.
+
+        Parameters
+        ----------
+        ref : Ref
+            The reference.
+        s : Symbol
+            The symbol, or the part of it the focus shows.
+
+        Returns
+        -------
+        dict or None
+            `state` (`new`, `changed` or `same`), `base` (the ref the branch started from)
+            and, for a whole symbol that changed, `rows` for the diff template; None if no
+            branch is being read or the symbol's file isn't in one of its worktrees.
+        """
+        index = self.ctx.index
+        whole = s
+        if ref.focus:
+            whole = next((w for w in index.symbols if w.qualified == s.qualified and w.kind == s.kind), s)
+        found = index.at_base(whole)
+        if found is None:
+            return None
+        base_ref, before = found
+        now = whole.text(index.files)
+        state = "new" if before is None else ("same" if before == now else "changed")
+        rows = None
+        if state == "changed" and not (ref.sig or ref.focus):
+            rows = diff_rows(textwrap.dedent(before), textwrap.dedent(now), context=10**6)
+        return {"state": state, "base": base_ref, "branch": self.ctx.worktrees.branch, "rows": rows}
+
+    # r[impl embed.docs]
+    def code_rows(self, s: Symbol, shown: list[int], indent: int, highlighted: list[str]) -> list[tuple[int | None, Markup, str]]:
+        """An excerpt's rows: its code a line at a time, and each run of its docs as one.
+
+        Parameters
+        ----------
+        s : Symbol
+            The symbol shown.
+        shown : list of int
+            The lines shown, in order, with gaps where its outline skips some.
+        indent : int
+            The spaces taken off every line.
+        highlighted : list of str
+            The file's lines, highlighted.
+
+        Returns
+        -------
+        list of tuple of (int or None, Markup, str)
+            Each row's line number (None for a gap), its HTML and its kind: `code`, `doc`
+            for a run of docs as prose, `raw` for its lines as written (shown instead, on
+            request), or `gap`.
+        """
+        lines = self.ctx.index.files.lines(s.file)
+        suffix = os.path.splitext(s.file)[1]
+        # Contiguous stretches of what's shown, so a run of docs never spans a gap
+        stretches: list[list[int]] = []
+        for n in shown:
+            if stretches and n == stretches[-1][-1] + 1:
+                stretches[-1].append(n)
+            else:
+                stretches.append([n])
+        rows: list[tuple[int | None, Markup, str]] = []
+        for k, stretch in enumerate(stretches):
+            if k:
+                rows.append((None, Markup("…"), "gap"))
+            raw = [lines[n - 1] for n in stretch]
+            runs = dict(doc_runs(raw, [highlighted[n - 1] for n in stretch], suffix))
+            i = 0
+            while i < len(stretch):
+                j = runs.get(i)
+                if j is None:
+                    rows.append((stretch[i], Markup(_dedent_html(highlighted[stretch[i] - 1], indent) or " "), "code"))
+                    i += 1
+                    continue
+                text = raw[i : j + 1]
+                body = rust_doc_html(text, self.doc_linker(s)) if suffix == ".rs" else python_doc_html(text)
+                pad = len(text[0]) - len(text[0].lstrip()) - indent
+                kind = "rust" if suffix == ".rs" else "python"
+                title = f"Lines {stretch[i]}–{stretch[j]}"
+                prose = f'<div class="doc {kind}" style="--pad: {pad}ch" title="{title}">{body}</div>'
+                rows.append((stretch[i], Markup(prose), "doc"))
+                for n in stretch[i : j + 1]:
+                    rows.append((n, Markup(_dedent_html(highlighted[n - 1], indent) or " "), "raw"))
+                i = j + 1
+        return rows
+
+    def doc_linker(self, s: Symbol):
+        """What links a name in `s`'s docs to its symbol, as rustdoc would: `Self` is the
+        type the docs are on or in."""
+
+        def link(name: str) -> str | None:
+            target = name.removesuffix("()")
+            if target == "Self" or target.startswith("Self::"):
+                types = ("struct", "enum", "trait", "union", "type")
+                owner = s.name if s.kind in types else (s.segments[-2] if len(s.segments) > 1 else "")
+                target = owner + target[4:]
+            sym, _ = self.ctx.index.resolve(target)
+            if sym is None:
+                return None
+            self.symbols[target] = symbol_data(self.walk, sym)
+            return f'<a class="sym" href="#" data-ref="{html.escape(target)}">'
+
+        return link
 
     # ---- markdown-it rules -----------------------------------------------------------------
 
@@ -551,12 +739,38 @@ class Renderer:
             lang = html.escape(tok.info.strip())
             return f'<pre class="plain" data-md="{line}"><code class="lang-{lang}">{html.escape(tok.content)}</code></pre>\n'
         parts = []
+        rows: list[str] = []
         for i, text in enumerate(tok.content.split("\n")):
             if parsed := embed_line(text):
                 target, focus, _ = parsed
                 if ref := self.by_line.get((line + 1 + i, f"{target} > {focus}" if focus else target)):
+                    # r[impl embed.definitions]
+                    if ref.block:
+                        rows.append(self.definition_row(ref))
+                        continue
+                    if rows:
+                        parts.append(definitions_table(rows))
+                        rows = []
                     parts.append(self.embed(ref))
+        if rows:
+            parts.append(definitions_table(rows))
         return f'<div class="walk-group" data-md="{line}" data-md-end="{end}">' + "\n".join(parts) + "</div>\n"
+
+    # r[impl embed.definitions]
+    def definition_row(self, ref: Ref) -> str:
+        """A term or fact on a line of a `walk` block: a row of its words, or its ID and how
+        it's known, linked to its definition, and its whole text."""
+        d = ref.definition
+        if not d:
+            what = "term" if ref.target.startswith("t:") else "fact"
+            name = f'<span class="broken" title="No such {what}">{html.escape(ref.target[2:])}</span>'
+            return f'<tr data-md="{ref.line}"><th>{name}</th><td></td></tr>'
+        key = self.note_definition(d)
+        words = html.escape(d.words) if d.kind == "term" else f"<code>{html.escape(d.id)}</code>"
+        name = f'<a class="term {d.kind}" href="{self.definition_href(d)}" data-term="{key}">{words}</a>'
+        if d.status:
+            name += f' <span class="status">{html.escape(d.status)}</span>'
+        return f'<tr data-md="{ref.line}"><th>{name}</th><td>{requirement_html(d.text)}</td></tr>'
 
     # r[impl embed.inline]
     def inline_ref(self, target: str, label: str | None, line: int) -> str:
@@ -603,16 +817,51 @@ class Renderer:
             scheme, _, rest = href.partition(":")
             target = {"walk": rest, "req": "r:" + rest, "term": "t:" + rest, "fact": "f:" + rest}[scheme]
             return self.inline_ref(target, label, env["line"])
-        if href.split("#")[0].endswith(".md") and not re.match(r"^[a-z]+:", href):
+        if not re.match(r"^[a-z]+:", href) and (src := self.source_link(href)):
+            # r[impl ui.context-link]
+            # A link to a source file opens it beside the page, at its lines
+            file, start, end = src
+            tok.attrSet("class", "srclink")
+            tok.attrSet("data-file", file)
+            if start:
+                tok.attrSet("data-start", str(start))
+                tok.attrSet("data-end", str(end))
+        elif href.split("#")[0].endswith(".md") and not re.match(r"^[a-z]+:", href):
             # A link to another codewalk opens it here
             target = os.path.normpath(os.path.join(os.path.dirname(self.walk.rel), href.split("#")[0]))
             if target in self.codewalks:
-                tok.attrSet("href", f"/walk/{target}")
+                tok.attrSet("href", f"{base()}/walk/{target}")
                 tok.attrSet("class", "walklink")
             elif target in self.specs:
-                tok.attrSet("href", f"/spec/{target}" + (f"#{href.split('#', 1)[1]}" if "#" in href else ""))
+                tok.attrSet("href", f"{base()}/spec/{target}" + (f"#{href.split('#', 1)[1]}" if "#" in href else ""))
                 tok.attrSet("class", "walklink")
         return self.walk.md.renderer.renderToken(tokens, idx, options, env)
+
+    def source_link(self, href: str) -> tuple[str, int | None, int | None] | None:
+        """The source file a relative link names, and the lines its `#L` anchor names.
+
+        Parameters
+        ----------
+        href : str
+            The link, as written, from the codewalk's folder.
+
+        Returns
+        -------
+        tuple of (str, int or None, int or None) or None
+            The file, from the root, with the first and last line, or None for each if
+            there's no anchor; None if the index doesn't read the file.
+        """
+        path, _, anchor = href.partition("#")
+        if not path:
+            return None
+        file = os.path.normpath(os.path.join(os.path.dirname(self.walk.rel), path))
+        if not self.ctx.index.has_file(file):
+            return None
+        m = re.fullmatch(r"L(\d+)(?:-L?(\d+))?", anchor)
+        if not m:
+            return file, None, None
+        start = int(m.group(1))
+        return file, start, int(m.group(2) or start)
 
     def link_close(self, tokens, idx, options, env) -> str:
         env["in_link"] = False

@@ -17,7 +17,7 @@ from pathlib import Path
 import tree_sitter_python
 from tree_sitter import Language, Node, Parser
 
-from codewalk.code.index import MARKER, Symbol
+from codewalk.code.index import MARKER, Symbol, file_symbol
 from codewalk.spec import tracey
 
 PYTHON = Language(tree_sitter_python.language())
@@ -76,7 +76,7 @@ def _comments_above(node: Node, siblings: list[Node]) -> list[Node]:
 
 
 def _docstring(definition: Node, source: bytes) -> tuple[str, str]:
-    """A function's or class's docstring, NumPy style.
+    """A module's, function's or class's docstring, NumPy style.
 
     Returns
     -------
@@ -86,7 +86,8 @@ def _docstring(definition: Node, source: bytes) -> tuple[str, str]:
         The rest, dedented: the extended summary and the sections (Parameters, Returns,
         Raises, …), as written.
     """
-    body = definition.child_by_field_name("body")
+    # A module's docstring is its first statement; a definition's, its body's
+    body = definition if definition.type == "module" else definition.child_by_field_name("body")
     if body is None or not body.named_children:
         return "", ""
     first = body.named_children[0]
@@ -116,7 +117,7 @@ def _head(definition: Node) -> int:
     return end
 
 
-# r[impl ref.sig]
+# r[impl ref.sig+2]
 def _outline(outer: Node, inner: Node, start: int) -> list[tuple[int, int]]:
     """What `sig` shows of a definition: its header and docstring and, for a class, its
     fields and its `__init__`'s header and docstring.
@@ -162,11 +163,16 @@ def _outline(outer: Node, inner: Node, start: int) -> list[tuple[int, int]]:
     return out
 
 
-# r[impl index.languages]
+# r[impl index.languages+2]
+# r[impl index.files]
 # r[impl index.start]
 def index_file(rel: str, source: bytes, parser: Parser, root: Path | None = None) -> list[Symbol]:
     tree = parser.parse(source)
-    out: list[Symbol] = []
+    module = tree.root_node
+    first = module.named_children[0] if module.named_children else None
+    doc = _docstring(module, source)
+    docs = (first.start_point.row + 1, first.end_point.row + 1) if first is not None and doc[0] else None
+    out: list[Symbol] = [file_symbol(rel, module_path(rel, root), source.count(b"\n") + 1, doc, docs)]
 
     def add(outer: Node, inner: Node, siblings: list[Node], qualified: list[str], kind: str, signature: str, doc: tuple[str, str]):
         # `outer` takes in any decorators; `inner` is the definition itself

@@ -123,7 +123,10 @@ python::module_path
 A name is any tail of a qualified name, on `::` boundaries, that matches exactly one
 symbol. [[CodeIndex::resolve]] returns that symbol, or none and the candidates: every
 match if it's ambiguous, the nearest few if nothing matches. Those candidates are what
-the editor and `codewalk check` offer as fixes.
+the editor and `codewalk check` offer as fixes. Each file is a symbol too, named by its
+module ([[file_symbol]]), so a reference with a `/` or a `.` in it, which no name has, is
+taken as a file's path, matched against the files' paths instead. And where a file and an
+item in it share a name, as `render` does here, the item is meant.
 
 ```walk
 CodeIndex::resolve
@@ -178,7 +181,8 @@ FrontMatter
 [[Walk::problems]] is what `codewalk check` prints and the editor lists. A name that
 doesn't resolve is an error, as is a link to a Markdown file that isn't there. Code that
 has changed since it was reviewed is a warning: nothing's wrong with the codewalk,
-but the text around it may no longer be true.
+but the text around it may no longer be true. So is a whole file in a `walk` block, which
+is too much to read in place.
 
 ```walk
 Walk::problems
@@ -219,7 +223,9 @@ Renderer::render
 
 Each embedded symbol is drawn by [[Renderer::embed]], which cuts the symbol's lines out
 of the highlighted file, strips the indent the symbol had inside its impl or class, and
-works out the review state. The markup is a Jinja template,
+works out the review state. Its rows come from [[Renderer::code_rows]], which shows each
+run of docs as one row of prose, rendered by [[codewalk::web::docs]], with the lines as
+written beside it, hidden until **as written** is clicked. The markup is a Jinja template,
 [`web/templates/figure.html`](../codewalk/web/templates/figure.html): a caption of two rows, the
 path (wrapping at each `::` rather than being cut short) with its actions, then the file
 and the review badge.
@@ -567,12 +573,12 @@ Where it could go:
 ### From the code back to codewalks
 
 The context panel shows a symbol in its file, but not which codewalks show it. Saying so
-is proposed in [its own PRD](prd/from-the-code-back-to-codewalks.md).
+is proposed in [its own PRD](prds/2026-11-07-3-from-the-code-back-to-codewalks.md).
 
 ## Changelog
 
 What was asked here and how it was settled, newest first.
 
-- 2026-11-07: The proposal for `Library::uses` moved to [a PRD of its own](prd/from-the-code-back-to-codewalks.md), since a codewalk explains code and a PRD proposes it.
+- 2026-11-07: The proposal for `Library::uses` moved to [a PRD of its own](prds/2026-11-07-3-from-the-code-back-to-codewalks.md), since a codewalk explains code and a PRD proposes it.
 - 2026-11-07 (`Library::uses`): **question** @claude: Parsing every codewalk on each call is fine for two, but not for fifty. → **answer** @claude: Agreed on both assumptions, and on `.codewalk/` with SQLite (the standard library's, so nothing new to install). (1 more note)
 - 2026-11-07 (`Walk::_collect`, `Walk::_resolve`): **question** @matthew: I think the `kind` and `type`s throughout here are coming straight from `markdown_it`, and so we can't turn them into enums? → **answer** @claude: Half and half.

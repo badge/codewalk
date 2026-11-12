@@ -1,9 +1,13 @@
 {# A requirement a PRD proposes, against the spec as it stands. #}
 {% set labels = {"new": "new", "changed": "changed", "removed": "removed", "quoted": "as in the spec", "error": "error"} %}
-<div class="req-def prd-req how-{{ c.how }}" id="r-{{ slug }}" data-md="{{ line }}">
+<div class="req-def prd-req how-{{ c.how }}" id="r-{{ slug }}" data-md="{{ line }}" data-md-end="{{ end }}">
   <div class="req-def-head">
     <code class="req-id">{{ c.id }}{% if c.version > 1 %}+{{ c.version }}{% endif %}</code>
     <span class="spacer"></span>
+    <span class="acts">
+      <a class="act" href="{{ zed }}" title="Open the PRD in Zed, at this requirement">Zed</a>
+      <button class="act" data-action="ask" title="Ask a question about this">Ask</button>
+    </span>
     <span class="badge how how-{{ c.how }}">{{ labels[c.how] }}</span>
   </div>
   {% if c.how == "changed" %}

@@ -25,7 +25,7 @@
   --serif: "Iowan Old Style", "Charter", Georgia, serif;
   /* Pygments */
   --t-k: #a626a4; --t-kt: #0b7285; --t-nf: #2f5bd3; --t-nc: #b35900; --t-s: #2b8a3e;
-  --t-c: #8a8a8a; --t-m: #c2410c; --t-o: #57606a; --t-nb: #0b7285; --t-na: #7048e8;
+  --t-c: #8a8a8a; --t-m: #c2410c; --t-o: #57606a; --t-nb: #0b7285; --t-na: #7048e8; --t-no: #c2255c;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -36,7 +36,7 @@
     --code-bg: #1f2026; --code-ink: #dcdcdc; --hl: #3a3420; --hl-edge: #d9a400;
     --shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
     --t-k: #d589e0; --t-kt: #5cc6d0; --t-nf: #8aa9ff; --t-nc: #f0a35a; --t-s: #8fd18a;
-    --t-c: #7d7f86; --t-m: #f59f6a; --t-o: #a0a4ab; --t-nb: #5cc6d0; --t-na: #b197fc;
+    --t-c: #7d7f86; --t-m: #f59f6a; --t-o: #a0a4ab; --t-nb: #5cc6d0; --t-na: #b197fc; --t-no: #f783ac;
   }
 }
 :root[data-theme="dark"] {
@@ -46,7 +46,7 @@
   --code-bg: #1f2026; --code-ink: #dcdcdc; --hl: #3a3420; --hl-edge: #d9a400;
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
   --t-k: #d589e0; --t-kt: #5cc6d0; --t-nf: #8aa9ff; --t-nc: #f0a35a; --t-s: #8fd18a;
-  --t-c: #7d7f86; --t-m: #f59f6a; --t-o: #a0a4ab; --t-nb: #5cc6d0; --t-na: #b197fc;
+  --t-c: #7d7f86; --t-m: #f59f6a; --t-o: #a0a4ab; --t-nb: #5cc6d0; --t-na: #b197fc; --t-no: #f783ac;
 }
 
 * { box-sizing: border-box; }
@@ -81,6 +81,7 @@ code { font-family: var(--mono); font-size: 0.88em; }
 .pill.ok { background: var(--ok-soft); color: var(--ok); }
 .pill.warn { background: var(--warn-soft); color: var(--warn); }
 .pill.err { background: var(--err-soft); color: var(--err); }
+.pill.pin { background: var(--faint); color: var(--ink); border: 1px solid var(--line); }
 
 /* ---- Index ----------------------------------------------------------------------- */
 
@@ -171,7 +172,8 @@ figure.walk figcaption { background: var(--panel); border-bottom: 1px solid var(
 .cap-main .kind { margin-top: 2px; flex-shrink: 0; }
 .cap-main .path { flex: 1; min-width: 0; line-height: 1.45; }
 .cap-main .acts { display: flex; gap: 2px; flex-shrink: 0; opacity: .55; transition: opacity .12s; }
-figure.walk:hover .acts, .acts:focus-within { opacity: 1; }
+.req-def-head .acts { display: flex; gap: 2px; flex-shrink: 0; opacity: .55; transition: opacity .12s; margin-right: 6px; }
+figure.walk:hover .acts, .prd-req:hover .acts, .acts:focus-within { opacity: 1; }
 .cap-sub { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .cap-sub .loc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .cap-sub .badge { flex-shrink: 0; }
@@ -199,6 +201,31 @@ pre.code code, pre.diff code { display: block; min-width: max-content; }
 .row .ln { flex: 0 0 auto; width: 52px; padding-right: 14px; text-align: right; color: var(--muted); opacity: .55; user-select: none; }
 .row .lc { white-space: pre; padding-right: 16px; }
 .row.more .lc { color: var(--muted); }
+/* Docs shown as prose, with their lines as written on request */
+.row.raw { display: none; }
+figure.as-written .row.raw { display: flex; }
+figure.as-written .row.docrow { display: none; }
+.row.docrow .lc { white-space: normal; padding: 2px 16px 6px 0; }
+/* As wide as the figure shows, not as the longest line of code: it stays put when the code scrolls */
+figure.walk { container-type: inline-size; }
+.doc { box-sizing: border-box; margin-left: var(--pad, 0); width: min(72ch, calc(100cqw - 72px - var(--pad, 0px))); position: sticky; left: 52px; font: 14px/1.6 var(--sans); color: var(--ink); border-left: 2px solid var(--line); padding-left: 12px; }
+.doc > :first-child { margin-top: 0; }
+.doc > :last-child { margin-bottom: 0; }
+.doc p, .doc ul, .doc ol, .doc table { margin: 0 0 8px; }
+.doc h1, .doc h2, .doc h3, .doc h4 { font-size: 14px; margin: 12px 0 4px; }
+pre.code .doc code { display: inline; min-width: 0; font-size: 12.5px; color: var(--code-ink); }
+pre.code .doc pre code { display: block; min-width: max-content; }
+.doc .doc-h { font-weight: 600; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 10px 0 2px; }
+.doc .doc-entries { margin: 0 0 4px; }
+.doc .doc-entries dt { margin-top: 4px; }
+pre.code .doc .doc-entries .doc-name { font-weight: 600; color: var(--ink); }
+.doc .doc-entries dd { margin: 0 0 0 18px; }
+.doc .doc-entries dd > :last-child { margin-bottom: 0; }
+.doc-code { margin: 6px 0 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.doc-code pre { margin: 0; padding: 8px 12px; overflow-x: auto; font: 12.5px/1.55 var(--mono); }
+.doc-code .doc-lang { display: block; padding: 4px 10px 0; text-align: right; font: 11px var(--mono); color: var(--muted); }
+.doc-code .doc-lang + pre { padding-top: 0; }
+.docs-toggle { margin-left: 6px; }
 .row.hl { background: var(--hl); box-shadow: inset 3px 0 0 var(--hl-edge); }
 .row.hl .ln { opacity: 1; color: var(--ink); }
 pre.diff { border-top: 1px dashed var(--line); background: var(--panel); }
@@ -218,6 +245,7 @@ pre.diff { border-top: 1px dashed var(--line); background: var(--panel); }
 .m, .mi, .mf, .mh, .mo, .il { color: var(--t-m); }
 .o, .ow, .p { color: var(--t-o); }
 .nb, .bp { color: var(--t-nb); }
+.no { color: var(--t-no); }
 .na, .nd, .nl { color: var(--t-na); }
 .lc a.req { font-style: normal; font-size: 11.5px; }
 
@@ -269,6 +297,13 @@ pre.diff { border-top: 1px dashed var(--line); background: var(--panel); }
 .palette .pr { font: 13px var(--mono); }
 .palette .pw { margin-left: auto; font: 11.5px var(--mono); color: var(--muted); white-space: nowrap; }
 .palette .ph { font-size: 12px; color: var(--muted); padding: 8px 16px; border-top: 1px solid var(--line); }
+.project-pick { margin-left: 10px; font: 13px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px; cursor: pointer; }
+.add-project { padding: 4px 0 8px; }
+.add-project h3 { margin: 12px 16px 8px; font-size: 15px; }
+.add-project label { display: flex; align-items: center; gap: 10px; padding: 6px 16px; font-size: 13px; }
+.add-project label select { flex: 1; font: 13px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+.add-project .buttons { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 16px 4px; }
+.add-project .error { color: var(--err); border-top: 0; }
 
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 99px; font-size: 13px; z-index: 70; box-shadow: var(--shadow); animation: toast 1.8s forwards; }
 @keyframes toast { 0% { opacity: 0; transform: translate(-50%, 8px); } 12%, 80% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
@@ -431,6 +466,14 @@ a.mention { color: inherit; text-decoration: underline dotted color-mix(in srgb,
 a.mention:hover { color: var(--accent); text-decoration-style: solid; }
 a.term { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 3px; }
 a.term.fact { color: var(--warn); }
+/* Terms and facts in a walk block: one table of what each means (embed.definitions) */
+table.definitions { display: table; width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; border: 1px solid var(--line); border-radius: 6px; }
+table.definitions th { border: 0; background: none; text-align: left; vertical-align: top; white-space: nowrap; font-weight: 600; padding: 8px 12px; border-bottom: 1px solid var(--faint); width: 1%; }
+table.definitions td { border: 0; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--faint); }
+table.definitions tr:last-child th, table.definitions tr:last-child td { border-bottom: 0; }
+table.definitions td p { margin: 0 0 6px; }
+table.definitions td p:last-child { margin: 0; }
+table.definitions .status { font: 12px var(--mono); color: var(--muted); }
 .k-term { background: var(--accent-soft); color: var(--accent); }
 .k-fact { background: var(--warn-soft); color: var(--warn); }
 .status { font: 600 10.5px var(--mono); padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: .04em; }
@@ -470,6 +513,13 @@ a.mc-prose p { margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-b
 /* ---- Settled proposals, requests, docstrings ------------------------------------------- */
 
 .badge.settled { background: var(--ok-soft); color: var(--ok); }
+.badge.branch-changed { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.badge.branch-new { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.badge.branch-same { background: var(--faint); color: var(--muted); }
+.badge.branch-gone { background: var(--err-soft); color: var(--err); font-weight: 600; }
+.tb.code-from { margin-left: 8px; }
+.tb.code-from.on-branch { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.palette.branches h3 { margin: 12px 16px 6px; font-size: 15px; }
 pre.diff.plan { border-top: 1px dashed var(--ok); }
 .thread.standing { border-left-color: var(--accent); }
 .thread.standing.open .ts { color: var(--accent); }
@@ -496,8 +546,8 @@ pre.diff.plan { border-top: 1px dashed var(--ok); }
 .spec-table tr.spec-folder td { font: 600 12px var(--mono); color: var(--muted); padding-top: 14px; border-bottom: 0; }
 
 /* Names in the code go to what they name */
-.lc :is(.n, .nf, .nc, .nn, .nx, .nd, .ne, .fm) { cursor: pointer; }
-.lc :is(.n, .nf, .nc, .nn, .nx, .nd, .ne, .fm):hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 2px; }
+.lc :is(.n, .nf, .nc, .nn, .nx, .nd, .ne, .fm, .no) { cursor: pointer; }
+.lc :is(.n, .nf, .nc, .nn, .nx, .nd, .ne, .fm, .no):hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 2px; }
 
 /* Editing in a narrow window, the preview needs all its width: the margin goes */
 @media (max-width: 1400px) {
@@ -531,3 +581,4 @@ pre.diff.plan { border-top: 1px dashed var(--ok); }
 .editor.with-context .preview .prose.spec .margin { display: none; }
 /* Starting a PRD from a thread */
 .thread .new-prd { margin: 8px 12px 12px; max-width: none; }
+pre.diff.branch { border-top: 0; }
