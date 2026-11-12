@@ -13,7 +13,7 @@
   <form class="new-prd" id="new-prd" hidden>
     <label>Title <input name="title" required autocomplete="off" placeholder="What the change is, in a few words"></label>
     <label>What you want <textarea name="ask" rows="4" required placeholder="In your own words: the problem, and what you'd like done about it"></textarea></label>
-    <p class="hint">It's written at <code>docs/prd/</code>, at the problem stage, with what you want as a standing request for the agent to pick up.</p>
+    <p class="hint">It's written at <code>docs/prds/</code>, at the problem stage, with what you want as a standing request for the agent to pick up.</p>
     <div class="cp-foot"><span class="np-error"></span><button type="button" class="tb" data-role="cancel">Cancel</button><button class="tb primary">Start it</button></div>
   </form>
 
@@ -34,7 +34,7 @@
       {% for s in group %}
       <article class="card" data-rel="{{ s.rel }}" data-tags="{{ s.tags | join(' ') }}"
                data-search="{{ ((s.title | plain) ~ ' ' ~ (s.summary or '') ~ ' ' ~ s.rel ~ ' ' ~ (s.tags | join(' '))) | lower }}">
-        <a class="card-title" href="/walk/{{ s.rel }}">{{ s.title | inline }}</a>
+        <a class="card-title" href="{{ base() }}/walk/{{ s.rel }}">{{ s.title | inline }}</a>
         <div class="card-path">{{ s.rel }}</div>
         {% if s.summary %}<p class="card-summary">{{ s.summary }}</p>{% endif %}
         {% if s.tags %}
@@ -42,8 +42,8 @@
         {% endif %}
         {% if s.links_to or s.linked_from %}
         <div class="card-rel">
-          {% if s.links_to %}<div><span class="rl">Links to</span>{% for r in s.links_to %}<a href="/walk/{{ r }}" data-rel-link="{{ r }}">{{ titles[r] | inline }}</a>{% endfor %}</div>{% endif %}
-          {% if s.linked_from %}<div><span class="rl">Linked from</span>{% for r in s.linked_from %}<a href="/walk/{{ r }}" data-rel-link="{{ r }}">{{ titles[r] | inline }}</a>{% endfor %}</div>{% endif %}
+          {% if s.links_to %}<div><span class="rl">Links to</span>{% for r in s.links_to %}<a href="{{ base() }}/walk/{{ r }}" data-rel-link="{{ r }}">{{ titles[r] | inline }}</a>{% endfor %}</div>{% endif %}
+          {% if s.linked_from %}<div><span class="rl">Linked from</span>{% for r in s.linked_from %}<a href="{{ base() }}/walk/{{ r }}" data-rel-link="{{ r }}">{{ titles[r] | inline }}</a>{% endfor %}</div>{% endif %}
         </div>
         {% endif %}
         <div class="card-meta">
@@ -77,7 +77,7 @@
       <tr class="spec-folder"><td colspan="5" style="padding-left:{{ 10 + depth * 18 }}px">{{ folder }}/</td></tr>
       {% else %}
       <tr>
-        <td style="padding-left:{{ 10 + depth * 18 }}px"><a href="/spec/{{ s.rel }}">{{ s.title | inline }}</a><div class="card-path">{{ s.rel.split('/')[-1] }}</div></td>
+        <td style="padding-left:{{ 10 + depth * 18 }}px"><a href="{{ base() }}/spec/{{ s.rel }}">{{ s.title | inline }}</a><div class="card-path">{{ s.rel.split('/')[-1] }}</div></td>
         <td>{{ s.requirements }}</td>
         <td>{% if s.requirements %}<span class="meter small" title="{{ s.cited }} of {{ s.requirements }}"><span style="width:{{ (100 * s.cited / s.requirements) | round | int }}%"></span></span> {{ s.cited }}{% else %}–{% endif %}</td>
         <td>{% if s.missing %}<span class="pill err">{{ s.missing }}</span>{% else %}–{% endif %}</td>

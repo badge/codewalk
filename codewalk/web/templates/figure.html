@@ -10,17 +10,21 @@
       {%- endfor -%}
     </button>
     <span class="acts">
-      <a class="act" href="{{ zed }}" title="Open in Zed">Zed</a>
+      {% if zed %}<a class="act" href="{{ zed }}" title="Open in Zed">Zed</a>{% endif %}
       <button class="act" data-action="copy" title="Copy the reference">Copy</button>
       <button class="act" data-action="ask" title="Ask a question about this">Ask</button>
-      <button class="act" data-action="review" title="Mark it reviewed as it stands">Reviewed</button>
+      {% if plan %}<button class="act" data-action="unsettle" title="Make it a proposal again, as it was before it was settled">Unsettle</button>{% endif %}
+      {% if state == "ok" %}<button class="act" data-action="reopen" title="Forget its review, so it reads as not reviewed">Reopen</button>
+      {% else %}<button class="act" data-action="review" title="Mark it reviewed as it stands">Reviewed</button>{% endif %}
     </span>
   </div>
   <div class="cap-sub">
     <a class="loc" href="#" data-action="context" title="Show it in its file">{{ s.file }}:{{ s.line }}</a>
     {% if ref.focus %}<span class="focus" title="Only part of it: from the line containing this">› {{ ref.focus }}</span>{% endif %}
     {% if ref.sig %}<span class="focus" title="Only its first line">signature</span>{% endif %}
+    {% if has_docs %}<button class="act docs-toggle" data-action="as-written" title="Show the docs as they're written in the code, or as prose">as written</button>{% endif %}
     {% if plan %}<button class="badge settled" data-action="plan" title="What was proposed, against what was written">settled · as proposed</button>{% endif %}
+    {% if branch %}<span class="badge branch-{{ branch.state }}" title="On {{ branch.branch }}, against where it started from {{ branch.base }}">{{ {"new": "new", "changed": "changed", "same": "unchanged"}[branch.state] }} on {{ branch.branch }}</span>{% endif %}
     <span class="spacer"></span>
     {% if state == "new" %}
     <span class="badge new" title="Not reviewed yet">not reviewed</span>
@@ -31,13 +35,22 @@
     {% endif %}
   </div>
 </figcaption>
+{% if branch and branch.rows %}
+<pre class="diff branch"><code>
+{%- for row in branch.rows -%}
+<span class="drow {{ row.kind }}"><span class="dt">{{ row.tag }}</span>{{ row.text or " " }}</span>
+{%- endfor -%}
+</code></pre>
+{% else %}
 <pre class="code"><code>
-{%- for n, line in rows -%}
+{%- for n, line, kind in rows -%}
 {%- if n is none %}<span class="row more"><span class="ln"></span><span class="lc">{{ line }}</span></span>
-{%- else %}<span class="row" data-line="{{ n }}"><span class="ln">{{ n }}</span><span class="lc">{{ line }}</span></span>{% endif -%}
+{%- elif kind == "doc" %}<span class="row docrow" data-line="{{ n }}"><span class="ln"></span><span class="lc">{{ line }}</span></span>
+{%- else %}<span class="row{% if kind == 'raw' %} raw{% endif %}" data-line="{{ n }}"><span class="ln">{{ n }}</span><span class="lc">{{ line }}</span></span>{% endif -%}
 {%- endfor -%}
 {%- if more %}<span class="row more"><span class="ln"></span><span class="lc">…</span></span>{% endif -%}
 </code></pre>
+{% endif %}
 {% if plan %}
 <pre class="diff plan" hidden><code>
 {%- for row in plan -%}

@@ -49,7 +49,8 @@ doc::Context sig
 ## Code: Symbol and Trace
 
 The code is indexed by [[CodeIndex]] into [[Symbol]]s: a function, a type, a method,
-with where it is and its docs. A [[Trace]] is a requirement's marker in the code,
+with where it is and its docs. Each file is one too, of kind `file`, spanning all of it,
+with its module docs ([[file_symbol]]). A [[Trace]] is a requirement's marker in the code,
 `r[impl id]`, and the symbol it's in. That's how a requirement finds its code.
 
 ```walk

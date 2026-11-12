@@ -14,13 +14,18 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import tree_sitter_rust
 from pydantic import BaseModel
 from tree_sitter import Language, Node, Parser
 
 from codewalk.spec import tracey
+
+if TYPE_CHECKING:
+    from codewalk.code.worktrees import Pin, Worktrees
 
 RUST = Language(tree_sitter_rust.language())
 
@@ -85,16 +90,30 @@ class SourceFiles:
     ----------
     root : Path
         The repository's root, which the files' paths are from.
+    where : Callable or None
+        Where a file is read from, by its path; under `root` if None.
+    fixed : Callable or None
+        A file's bytes as they were at a commit, by its path, or None for one read from
+        `where`; such a file never changes, so it's read once.
     """
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, where: Callable[[str], Path] | None = None, fixed: Callable[[str], bytes | None] | None = None):
         self.root = root
-        self._cache: dict[str, tuple[float, list[str]]] = {}
+        self.where = where or (lambda rel: root / rel)
+        self.fixed = fixed
+        self._cache: dict[str, tuple[float | None, list[str]]] = {}
 
     def lines(self, rel: str) -> list[str]:
-        path = self.root / rel
-        mtime = path.stat().st_mtime
         cached = self._cache.get(rel)
+        if self.fixed and (cached is None or cached[0] is None):
+            if cached:
+                return cached[1]
+            if (data := self.fixed(rel)) is not None:
+                lines = data.decode(errors="replace").split("\n")
+                self._cache[rel] = (None, lines)
+                return lines
+        path = self.where(rel)
+        mtime = path.stat().st_mtime
         if cached and cached[0] == mtime:
             return cached[1]
         lines = path.read_text().split("\n")
@@ -199,11 +218,65 @@ def _base_type(text: str) -> str:
     return names[-1] if names else ""
 
 
-# r[impl index.languages]
+def file_symbol(rel: str, qualified: list[str], length: int, doc: tuple[str, str], docs: tuple[int, int] | None) -> Symbol:
+    """A file as a symbol of its own, spanning all of it.
+
+    Parameters
+    ----------
+    rel : str
+        The file, from the root.
+    qualified : list of str
+        Its module path; empty for a crate's root, which is named by its path only.
+    length : int
+        Its number of lines.
+    doc : tuple of (str, str)
+        Its module docs' summary and the rest.
+    docs : tuple of (int, int) or None
+        The lines its module docs are on, which are what `sig` shows; None if it has none.
+
+    Returns
+    -------
+    Symbol
+        Of kind `file`.
+    """
+    return Symbol(
+        qualified="::".join(qualified) or rel,
+        kind="file",
+        file=rel,
+        start=1,
+        line=1,
+        end=length,
+        signature=rel,
+        doc=doc[0],
+        details=doc[1],
+        outline=[docs] if docs else [],
+    )
+
+
+# r[impl index.languages+2]
+# r[impl index.files]
 # r[impl index.start]
 def index_file(rel: str, source: bytes, parser: Parser) -> list[Symbol]:
     tree = parser.parse(source)
-    out: list[Symbol] = []
+    lines = source.decode().split("\n")
+    # The module docs: the `//!` lines at the top, after any blank lines and `#![…]`
+    docs: list[int] = []
+    for n, line in enumerate(lines, start=1):
+        text = line.strip()
+        if text.startswith("//!"):
+            docs.append(n)
+        elif text and not text.startswith("#!") or docs and not text:
+            break
+    summary, _, rest = "\n".join(lines[n - 1].strip()[3:].removeprefix(" ") for n in docs).strip().partition("\n\n")
+    out: list[Symbol] = [
+        file_symbol(
+            rel,
+            module_path(rel),
+            len(lines),
+            (re.sub(r"\s+", " ", summary), rest.strip()),
+            (docs[0], docs[-1]) if docs else None,
+        )
+    ]
 
     def add(node: Node, siblings: list[Node], qualified: list[str], kind: str, signature: str | None = None):
         above = _leading(node, siblings)
@@ -227,6 +300,9 @@ def index_file(rel: str, source: bytes, parser: Parser) -> list[Symbol]:
         siblings = list(container.children)
         for node in container.named_children:
             t = node.type
+            # A module in a file of its own is that file
+            if t == "mod_item" and node.child_by_field_name("body") is None:
+                continue
             if t in ITEM_KINDS:
                 name = _text(node.child_by_field_name("name"), source)
                 if not name:
@@ -294,31 +370,153 @@ class CodeIndex:
         The repository's root.
     globs : list of str
         The source files, from the root: `.rs` and `.py` files are indexed.
+    worktrees : Worktrees or None
+        A branch's worktrees to read the files from instead, under the same paths.
+    pin : Pin or None
+        A commit to read the project's own files at instead, from git; they never change
+        then, and the worktrees aren't read.
     """
 
-    def __init__(self, root: Path, globs: list[str]):
+    def __init__(self, root: Path, globs: list[str], worktrees: Worktrees | None = None, pin: Pin | None = None):
         self.root = root
         self.globs = globs
-        self.files = SourceFiles(root)
+        self.pin = pin
+        self.worktrees = None if pin else worktrees
+        self.files = SourceFiles(root, self.where, self.fixed if pin else None)
         from codewalk.code import python
 
         self.parsers = {
             ".rs": (Parser(RUST), index_file),
-            ".py": (python.parser(), lambda rel, source, parser: python.index_file(rel, source, parser, root)),
+            ".py": (python.parser(), lambda rel, source, parser: python.index_file(rel, source, parser, self.python_root(rel))),
         }
         self._by_file: dict[str, tuple[float, list[Symbol]]] = {}
         self.symbols: list[Symbol] = []
         self._traces: dict[str, list[Trace]] | None = None
+        # Files as they were where the branch being read started, by commit and path
+        self._at_base: dict[tuple[str, str], tuple[list[str], list[Symbol]]] = {}
         self.refresh()
 
-    def paths(self) -> list[Path]:
-        seen = []
-        for g in self.globs:
-            seen.extend(p for p in self.root.glob(g) if p.is_file() and p.suffix in self.parsers)
-        return sorted(set(seen))
+    # r[impl review.branch-code]
+    def where(self, rel: str) -> Path:
+        """Where a source file is read from: its worktree on the branch being read, if it's
+        in one, else under the root.
 
+        Parameters
+        ----------
+        rel : str
+            The file, from the root.
+
+        Returns
+        -------
+        Path
+            The file on disk.
+        """
+        if self.worktrees and (at := self.worktrees.where(rel)):
+            return at
+        return self.root / rel
+
+    # r[impl pin.own-repo]
+    def pinned(self, rel: str) -> bool:
+        """Whether a file is read at the pinned commit: one in the project's own repository,
+        while it's pinned."""
+        return self.pin is not None and not self.pin.path(rel).startswith("../")
+
+    # r[impl pin.at]
+    def fixed(self, rel: str) -> bytes | None:
+        """A file as it was at the pinned commit, or None if it's read from disk."""
+        from codewalk.code.worktrees import blob
+
+        return blob(self.pin.repo, self.pin.commit, self.pin.path(rel)) if self.pin and self.pinned(rel) else None
+
+    def text(self, rel: str) -> str:
+        """A source file's text, wherever it's read from."""
+        return "\n".join(self.files.lines(rel))
+
+    def on_disk(self, rel: str) -> Path | None:
+        """The file on disk that's shown for a path, or None if it's read from git."""
+        return None if self.pinned(rel) else self.where(rel)
+
+    def highlighted(self, rel: str) -> list[str]:
+        """A source file's lines as HTML, highlighted, wherever it's read from."""
+        from codewalk.code.highlight import highlight_fixed, highlight_lines
+
+        if self.pin and self.pinned(rel):
+            return highlight_fixed(f"{self.pin.commit}:{rel}", self.text(rel), Path(rel).suffix)
+        return highlight_lines(self.where(rel))
+
+    def zed(self, rel: str, line: int | None = None) -> str | None:
+        """A link that opens a source file in Zed, or None if it's not on disk to open."""
+        path = self.on_disk(rel)
+        return f"zed://file/{path.resolve()}" + (f":{line}" if line else "") if path else None
+
+    # r[impl review.branch-diff]
+    def at_base(self, sym: Symbol) -> tuple[str, str | None] | None:
+        """The symbol as it was where the branch being read started, to show what the branch
+        changed in it.
+
+        It's the symbol of the same qualified name and kind in the file as it was at the
+        commit the branch shares with the ref it started from.
+
+        Parameters
+        ----------
+        sym : Symbol
+            The symbol, whole, as it is on the branch.
+
+        Returns
+        -------
+        tuple of (str, str or None) or None
+            The ref the branch started from, and the symbol's text there, or None for its
+            text if it wasn't there; None if no branch is being read, or the symbol's file
+            isn't in one of its worktrees.
+        """
+        from codewalk.code.worktrees import blob
+
+        found = self.worktrees.in_repo(sym.file) if self.worktrees else None
+        if not found:
+            return None
+        c, path = found
+        key = (c.base, sym.file)
+        if key not in self._at_base:
+            data = blob(c.worktree, c.base, path)
+            if data is None:
+                self._at_base[key] = ([], [])
+            else:
+                parser, index = self.parsers[Path(sym.file).suffix]
+                self._at_base[key] = (data.decode(errors="replace").split("\n"), index(sym.file, data, parser))
+        lines, symbols = self._at_base[key]
+        match = next((b for b in symbols if b.qualified == sym.qualified and b.kind == sym.kind), None)
+        return c.base_ref, "\n".join(lines[match.start - 1 : match.end]) if match else None
+
+    def python_root(self, rel: str) -> Path:
+        """The root a Python file's package path is worked out from: such that it and `rel`
+        give the file, wherever it's read from."""
+        if self.worktrees and (c := self.worktrees.checkout(rel)) and c.prefix == "":
+            return c.worktree / c.within
+        return self.root
+
+    def paths(self) -> list[str]:
+        """The source files, as paths from the root, wherever each is read from."""
+        seen = set()
+        for g in self.globs:
+            c = self.worktrees.checkout(g) if self.worktrees else None
+            if self.pin and self.pinned(g):
+                from codewalk.code.worktrees import glob_re, tree
+
+                match = glob_re(g)
+                found = tree(self.pin.repo, self.pin.commit, self.pin.within)
+                seen.update(rel for rel in found if match.match(rel) and Path(rel).suffix in self.parsers)
+                continue
+            if c:
+                base = c.worktree / c.within
+                found = (c.prefix + str(p.relative_to(base)) for p in base.glob(g[len(c.prefix) :]))
+            else:
+                found = (str(p.relative_to(self.root)) for p in self.root.glob(g))
+            seen.update(rel for rel in found if Path(rel).suffix in self.parsers and self.where(rel).is_file())
+        return sorted(seen)
+
+    # r[impl serve.live.settle]
     def refresh(self) -> bool:
-        """Re-read changed files.
+        """Re-read changed files, following files added, removed and moved.
 
         Returns
         -------
@@ -327,15 +525,28 @@ class CodeIndex:
         """
         changed = False
         current = {}
-        for p in self.paths():
-            rel = str(p.relative_to(self.root))
-            mtime = p.stat().st_mtime
-            cached = self._by_file.get(rel)
-            if cached and cached[0] == mtime:
-                current[rel] = cached
+        for rel in self.paths():
+            if self.pinned(rel):
+                # As it was at the commit, which never changes
+                if rel not in self._by_file and (data := self.fixed(rel)) is not None:
+                    parser, index = self.parsers[Path(rel).suffix]
+                    current[rel] = (0.0, index(rel, data, parser))
+                    changed = True
+                elif rel in self._by_file:
+                    current[rel] = self._by_file[rel]
                 continue
-            parser, index = self.parsers[p.suffix]
-            current[rel] = (mtime, index(rel, p.read_bytes(), parser))
+            p = self.where(rel)
+            try:
+                mtime = p.stat().st_mtime
+                cached = self._by_file.get(rel)
+                if cached and cached[0] == mtime:
+                    current[rel] = cached
+                    continue
+                parser, index = self.parsers[p.suffix]
+                current[rel] = (mtime, index(rel, p.read_bytes(), parser))
+            except FileNotFoundError:
+                # Gone since it was found, as in a rebase: it's left out, like any file gone
+                continue
             changed = True
         if set(current) != set(self._by_file):
             changed = True
@@ -374,9 +585,12 @@ class CodeIndex:
     def in_file(self, rel: str) -> list[Symbol]:
         return self._by_file.get(rel, (0, []))[1]
 
+    def has_file(self, rel: str) -> bool:
+        return rel in self._by_file
+
     # r[impl ref.tail]
-    # r[impl ref.ambiguous]
     # r[impl ref.crate]
+    # r[impl ref.file]
     def resolve(self, ref: str) -> tuple[Symbol | None, list[Symbol]]:
         """The one symbol `ref` names, or None and the candidates.
 
@@ -397,6 +611,43 @@ class CodeIndex:
         candidates : list of Symbol
             Empty if it resolved; else the matches, or the nearest names.
         """
+        symbol, hits = self.lookup(ref)
+        if symbol or hits:
+            return symbol, hits
+        if "#" not in ref and ("/" in ref or "." in ref):
+            return None, self.nearest(ref.rsplit("/", 1)[-1].split(".")[0])
+        name = ref.split("#", 1)[-1]
+        if name.startswith("impl "):
+            # Up to five impls of the type
+            ty = name[len("impl ") :].strip().rpartition(" for ")[2].split("::")[-1]
+            return None, [s for s in self.symbols if s.kind == "impl" and s.segments[-2] == ty][:5]
+        return None, self.nearest(name)
+
+    # r[impl ref.ambiguous]
+    def lookup(self, ref: str) -> tuple[Symbol | None, list[Symbol]]:
+        """The one symbol `ref` names, or None and every symbol it could mean.
+
+        As `resolve`, but without the nearest names when it names nothing: if it gives
+        candidates, the name is taken by each of them, and so is ambiguous.
+
+        Parameters
+        ----------
+        ref : str
+            The reference, as written.
+
+        Returns
+        -------
+        symbol : Symbol or None
+            The symbol, if exactly one matches.
+        candidates : list of Symbol
+            Empty if it resolved or names nothing; else the matches.
+        """
+        # A file, by its path or any tail of it: `store/encode.rs`, `index.py`
+        if "#" not in ref and ("/" in ref or "." in ref):
+            files = [s for s in self.symbols if s.kind == "file" and (s.file == ref or s.file.endswith("/" + ref))]
+            if len(files) == 1:
+                return files[0], []
+            return None, files
         file = None
         if "#" in ref:
             file, ref = ref.split("#", 1)
@@ -417,11 +668,14 @@ class CodeIndex:
         items = [s for s in hits if s.kind not in ("field",)]
         if len(hits) > 1 and len(items) == 1:
             return items[0], []
+        # So can a module's file and an item in it (`render` and `render::render`): the
+        # item is meant, and the file is named by more of its module path, or its path
+        items = [s for s in items if s.kind != "file"]
+        if len(hits) > 1 and len(items) == 1:
+            return items[0], []
         if len(hits) == 1:
             return hits[0], []
-        if len(hits) > 1:
-            return None, hits
-        return None, self.nearest(ref)
+        return None, hits
 
     def _resolve_impl(self, ref: str, pool: list[Symbol]) -> tuple[Symbol | None, list[Symbol]]:
         """An impl block, named by its type, as far qualified as it needs to be.
@@ -440,7 +694,7 @@ class CodeIndex:
         symbol : Symbol or None
             The impl block, if exactly one matches.
         candidates : list of Symbol
-            Empty if it resolved; else the matches, or up to five impls of the type.
+            Empty if it resolved or names nothing; else the matches.
         """
         body = ref[len("impl ") :].strip()
         trait, _, ty = body.rpartition(" for ")
@@ -451,9 +705,7 @@ class CodeIndex:
         hits = [s for s in pool if s.kind == "impl" and (s.segments == want if anchored else s.segments[-len(want) :] == want)]
         if len(hits) == 1:
             return hits[0], []
-        if hits:
-            return None, hits
-        return None, [s for s in pool if s.kind == "impl" and s.segments[-2] == path[-1]][:5]
+        return None, hits
 
     # r[impl ui.context]
     def named_at(self, name: str, file: str, line: int) -> Symbol | None:
@@ -594,7 +846,38 @@ class CodeIndex:
         return sym.qualified
 
 
-# r[impl ref.focus]
+def statement_end(lines: list[str], first: int) -> int:
+    """The last line of the largest Rust node that starts where line `first`'s code does.
+
+    That's the statement, item or expression the line starts, however many lines it
+    wraps onto: `let continues =` runs to the `;` on the line after.
+
+    Parameters
+    ----------
+    lines : list of str
+        The file's lines.
+    first : int
+        The line, 1-based.
+
+    Returns
+    -------
+    int
+        Its last line, 1-based; `first` if the line starts no node (it opens with a `}`
+        that closes one above, say).
+    """
+    text = lines[first - 1]
+    column = len(text.encode()) - len(text.lstrip().encode())
+    tree = Parser(RUST).parse("\n".join(lines).encode())
+    point = (first - 1, column)
+    node = tree.root_node.descendant_for_point_range(point, point)
+    if node is None or node.start_point != point:
+        return first
+    while node.parent is not None and node.parent.start_point == point:
+        node = node.parent
+    return max(first, node.end_point.row + 1)
+
+
+# r[impl ref.focus+2]
 def narrow(sym: Symbol, focus: str, files: SourceFiles) -> Symbol | None:
     """The part of `sym` that starts at the first line containing `focus`.
 
@@ -637,5 +920,6 @@ def narrow(sym: Symbol, focus: str, files: SourceFiles) -> Symbol | None:
         last = n
         if not opened or depth <= 0:
             break
+    last = max(last, min(statement_end(lines, first), sym.end))
     first_line = lines[first - 1].strip()
     return sym.model_copy(update={"start": top, "line": first, "end": last, "signature": first_line, "doc": ""})

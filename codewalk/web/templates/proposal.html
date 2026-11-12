@@ -13,7 +13,7 @@
     <span class="acts">
       {% if zed %}<a class="act" href="{{ zed }}" title="Open in Zed">Zed</a>{% endif %}
       <button class="act" data-action="ask" title="Ask a question about this">Ask</button>
-      {% if s %}<button class="act primary" data-action="settle" title="Replace the proposal with the code as written">Settle</button>
+      {% if made %}<button class="act primary" data-action="settle" title="Replace the proposal with the code as written">Settle</button>
       {% elif not ambiguous %}<button class="act{{ '' if agreed else ' primary' }}" data-action="agree" title="Agree it: a decision in the thread under it, so it can be written">{{ "Agree again" if agreed else "Agree" }}</button>{% endif %}
     </span>
   </div>
@@ -21,7 +21,9 @@
     {% if s and ref.change %}
     <a class="loc" href="#" data-action="context">{{ s.file }}:{{ s.line }}</a>
     <span class="spacer"></span>
-    <span class="badge proposed" title="The code as it is, then as it will be: settle it once the change is made">change proposed</span>
+    {% if made %}<span class="badge written" title="The code matches the draft: settle it">change made</span>
+    {% elif agreed %}<span class="badge agreed" title="{{ agreed.text }}">change agreed</span>
+    {% else %}<span class="badge proposed" title="The code as it is, then as it will be: it can be settled once the code matches the draft">change proposed</span>{% endif %}
     {% elif s %}
     <a class="loc" href="#" data-action="context">{{ s.file }}:{{ s.line }}</a>
     <span class="spacer"></span>

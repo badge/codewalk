@@ -56,7 +56,9 @@ a proposed change to it, shown against it, not a second definition (`prd.terms`)
 The spec view, the glossary and tracey go on reading only the spec itself, so a PRD's
 proposals don't count until they're moved into it, at the work. `codewalk check` checks a
 PRD's spec as it checks its references: a changed requirement without a new version, or a
-term cited and defined nowhere, is an error (`prd.check`).
+term cited and defined nowhere, is an error (`prd.check`). A done PRD, at the work stage with
+every proposal settled, isn't checked against the spec: it's the record of why, and the spec
+moves on without it.
 
 ### Its code, in outline
 
@@ -78,7 +80,9 @@ agreeing, setting the stage) a click away.
 `codewalk new PATH --title T --prd` starts one from a template with a section for each
 stage and no samples (`prd.template`). In the browser, a person starts one from the index
 with **New PRD**: a title and, in their own words, what they want. codewalk writes the
-PRD at `docs/prd/` and the title's slug, with what they asked for as a standing request at
+PRD in `docs/prds/`, named so they sort in the order they were started: the day, its
+number that day and the title's slug, `2026-11-12-1-stop-a-battery.md`. What they asked
+for goes in as a standing request at
 the top, and opens it (`prd.start`). An agent working in the same folder finds the
 request with `codewalk context`, and writes into the stage the PRD is at. A question in
 a codewalk that shows something wrong with the code becomes a PRD the same way: its thread
@@ -142,15 +146,18 @@ r[prd.terms]
 A term or fact defined in a PRD MUST be read as a definition the PRD proposes: shown as new,
 or against the spec's definition of the same ID as changed, and not as part of the spec.
 
-r[prd.check]
+r[prd.check+2]
 `codewalk check` MUST check each PRD's requirements and definitions, reporting the errors
 `prd.compare` and `glossary.errors` describe with their file and line, and exiting non-zero on
-one, as it does for a broken reference.
+one, as it does for a broken reference. A done PRD, one at the work stage with no proposal
+left that isn't settled, MUST NOT be checked against the spec.
 
-r[prd.start]
+r[prd.start+2]
 The index MUST offer to start a PRD from a title and what the person wants: it MUST write
-the template at `docs/prd/` and the title's slug, with what they want as a `[!request]`
-signed as them at the top, and open it, refusing if that file exists. It MUST NOT create
+the template in `docs/prds/`, named by the day it's started, one more than the highest
+number of that day's PRDs (or 1) and the title's slug, as `2026-11-12-1-stop-a-battery.md`,
+with what they want as a `[!request]` signed as them at the top, and open it, refusing if a
+PRD of that slug was started that day. It MUST NOT create
 or change a branch or a worktree.
 
 r[prd.from-thread]

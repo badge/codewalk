@@ -38,10 +38,12 @@ to other codewalks are how codewalks relate to each other.
 
 from __future__ import annotations
 
+import copy
 import os
 import re
+from functools import cached_property
 from pathlib import Path
-from typing import Literal, get_args
+from typing import TYPE_CHECKING, Literal, get_args
 
 import yaml
 from markdown_it import MarkdownIt
@@ -57,6 +59,9 @@ from codewalk.spec.requirements import Requirement, SpecIndex
 from codewalk.spec.terms import Definition, Glossary
 from codewalk.walk.notes import Note, Thread, threads
 from codewalk.walk.review import ReviewState
+
+if TYPE_CHECKING:
+    from codewalk.code.worktrees import Pin, Worktrees
 
 WIKI = re.compile(r"\[\[([^\[\]|]+?)(?:\|([^\[\]]+?))?\]\]")
 
@@ -90,11 +95,30 @@ class FrontMatter(BaseModel):
     # Where it goes among the others in its folder: lighter first, then those without one,
     # by title
     weight: int | None = None
+    # A ref in the project's repository, a tag best, to read its code at instead of as it is
+    at: str | None = None
 
     @field_validator("tags", "related", mode="before")
     @classmethod
     def _one_or_many(cls, v):
         return [v] if isinstance(v, str) else v
+
+
+def definition_cell(d: Definition, href: str) -> str:
+    """A term's words, or a fact's ID and how it's known, linked to where it's defined."""
+    if d.kind == "term":
+        return f"[{d.words}]({href})"
+    return f"[`{d.id}`]({href})" + (f" ({d.status})" if d.status else "")
+
+
+def table_text(text: str) -> str:
+    """Text as one cell of a Markdown table: on one line, its pipes escaped."""
+    return " ".join(text.split()).replace("|", "\\|")
+
+
+def definition_table(rows: list[str]) -> str:
+    """A run of terms and facts, as a Markdown table."""
+    return "\n".join(["| Term | Meaning |", "| ---- | ------- |", *rows])
 
 
 class Ref(BaseModel):
@@ -103,7 +127,8 @@ class Ref(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     target: str
-    # "term" is a `t:` or `f:` reference to a term or fact.
+    # "term" is a `t:` or `f:` reference to a term or fact, inline or (`block`) on a line of
+    # a `walk` block, where its whole definition is shown.
     # "embed" is a line of a `walk` block (a symbol, or with `r:`, a requirement);
     # "proposal" a `walk proposed` block
     kind: Literal["embed", "inline", "req", "proposal", "term"]
@@ -116,6 +141,8 @@ class Ref(BaseModel):
     requirement: Requirement | None = None
     definition: Definition | None = None
     candidates: list[Symbol] = []
+    # Whether the candidates are symbols it names (so it's taken), not just names close to it
+    ambiguous: bool = False
     # Why it can't be shown, when it names a symbol but not the part `focus` asks for
     error: str | None = None
     # Proposed: a name that may not exist yet. A proposal's draft code, and its language;
@@ -126,6 +153,8 @@ class Ref(BaseModel):
     settled: bool = False
     draft: str | None = None
     lang: str | None = None
+    # A term or fact on a line of a `walk` block, shown as its definition
+    block: bool = False
 
     @property
     def key(self) -> str:
@@ -220,7 +249,7 @@ def markdown() -> MarkdownIt:
 
 
 # r[impl walk.what]
-# r[impl prd.check]
+# r[impl prd.check+2]
 def might_be_codewalk(text: str) -> bool:
     """Whether a file makes a reference, or is a PRD, which is checked whether it does or not."""
     refers = "```walk" in text or "[[" in text or any(f"]({s}:" in text for s in ("walk", "req", "term", "fact"))
@@ -239,15 +268,65 @@ class Context:
         The repository's root: every path codewalk deals in is from here.
     config : Config or None
         Where to look; the defaults if None.
+    worktrees : Worktrees or None
+        A branch's worktrees to read the code from, to review the work on it; the code as
+        it is under the root if None.
     """
 
-    def __init__(self, root: Path, config: Config | None = None):
+    def __init__(self, root: Path, config: Config | None = None, worktrees: Worktrees | None = None):
         self.root = root
         self.config = config or Config()
-        self.index = CodeIndex(root, self.config.sources)
+        self.worktrees = worktrees
+        self.index = CodeIndex(root, self.config.sources, worktrees)
         self.spec = SpecIndex(root, self.config.specs)
         self.review = ReviewState(root)
         self.glossary = Glossary(root, [*self.spec.globs, *self.config.docs])
+        # The commit the code is read at, for a pinned codewalk's context
+        self.pin: Pin | None = None
+        # Those contexts, by ref and commit: a commit never changes, so each is kept
+        self._pinned: dict[tuple[str, str], Context] = {}
+
+    # r[impl pin.at]
+    # r[impl pin.everywhere]
+    def at(self, ref: str) -> Context | None:
+        """This project, with its code read at a ref, for a codewalk pinned to it.
+
+        The spec, glossary and review are this project's, shared; only the code differs,
+        and no branch's worktrees are read for it.
+
+        Parameters
+        ----------
+        ref : str
+            A ref in the project's repository.
+
+        Returns
+        -------
+        Context or None
+            None if the ref names no commit there.
+        """
+        from codewalk.code.worktrees import pin
+
+        found = pin(self.root, ref)
+        if found is None:
+            return None
+        key = (ref, found.commit)
+        if key not in self._pinned:
+            ctx = copy.copy(self)
+            ctx.worktrees = None
+            ctx.pin = found
+            ctx.index = CodeIndex(self.root, self.config.sources, pin=found)
+            ctx.__dict__["checked_out"] = ctx.index
+            self._pinned[key] = ctx
+        ctx = self._pinned[key]
+        # Only a source outside the repository can have changed
+        ctx.index.refresh()
+        return ctx
+
+    @cached_property
+    def checked_out(self) -> CodeIndex:
+        """The code as it's checked out, while a branch's worktrees are being read: where a
+        name the branch removed is still found."""
+        return CodeIndex(self.root, self.config.sources) if self.worktrees else self.index
 
     @property
     def doc_globs(self) -> list[str]:
@@ -311,12 +390,14 @@ class Walk:
         self.links: list[str] = []
         self.meta = FrontMatter()
         self.meta_error: str | None = None
+        # The project, while `ctx` is it read at the codewalk's pin
+        self.project = ctx
         self.threads: list[Thread] = [t for _, _, t in threads(self.tokens)]
         self._collect()
 
     # ---- Parsing --------------------------------------------------------------------
 
-    # r[impl ref.focus]
+    # r[impl ref.focus+2]
     def _resolve(self, ref: Ref) -> Ref:
         if ref.target.startswith(("t:", "f:")):
             ref.kind = "term"
@@ -328,6 +409,7 @@ class Walk:
             ref.requirement = self.ctx.spec.find(ref.target[2:], self.rel)
         else:
             ref.symbol, ref.candidates = self.ctx.index.resolve(ref.target)
+            ref.ambiguous = not ref.symbol and len(self.ctx.index.lookup(ref.target)[1]) > 1
             if ref.symbol and ref.focus:
                 part = narrow(ref.symbol, ref.focus, self.ctx.index.files)
                 if part is None:
@@ -362,7 +444,10 @@ class Walk:
                 for i, line in enumerate(tok.content.split("\n")):
                     if parsed := embed_line(line):
                         target, focus, sig = parsed
-                        self.refs.append(self._resolve(Ref(target=target, kind="embed", line=start + i, sig=sig, focus=focus)))
+                        # r[impl embed.definitions]
+                        block = target.startswith(("t:", "f:"))
+                        ref = Ref(target=target, kind="embed", line=start + i, sig=sig, focus=focus, block=block)
+                        self.refs.append(self._resolve(ref))
             elif tok.type == "inline" and tok.children:
                 line = tok.map[0] + 1 if tok.map else 0
                 for child in tok.children:
@@ -386,7 +471,7 @@ class Walk:
             self._link(rel)
 
     # r[impl proposal.draft+2]
-    # r[impl proposal.change]
+    # r[impl proposal.change+2]
     def _proposal(self, tok) -> Ref:
         """A `walk proposed` block, or `walk proposed change`: the name, then the draft."""
         lines = tok.content.rstrip("\n").split("\n")
@@ -396,7 +481,8 @@ class Walk:
         lang = words[3 if change else 2] if len(words) > (3 if change else 2) else None
         line = (tok.map[0] + 2 + first) if tok.map else 0
         ref = Ref(
-            target=lines[first].strip() if lines else "",
+            # A proposal's name may still say it's proposed, as an inline one does
+            target=lines[first].strip().removeprefix("?") if lines else "",
             kind="proposal",
             line=line,
             proposed=True,
@@ -406,7 +492,7 @@ class Walk:
         )
         return self._resolve(ref)
 
-    # r[impl proposal.settle]
+    # r[impl proposal.settle+2]
     def _settled(self, tok) -> Ref | None:
         """A `walk settled` block: a proposal that's been written.
 
@@ -429,6 +515,9 @@ class Walk:
             return None
         target, focus, sig = parsed
         words = tok.info.split()
+        # `walk settled change rust`: settled from a change, in Rust
+        if len(words) > 2 and words[2] == "change":
+            words = words[:2] + words[3:]
         ref = Ref(
             target=target,
             kind="embed",
@@ -451,14 +540,23 @@ class Walk:
         t = self.thread_after(ref)
         return next((n for n in reversed(t.all()) if n.kind == "decision"), None) if t else None
 
+    # r[impl proposal.change+2]
+    def made(self, ref: Ref) -> bool:
+        """Whether a proposal is written: its name exists, and for a change, the code matches
+        its draft."""
+        if not ref.symbol:
+            return False
+        return not ref.change or matches_draft(ref.symbol.text(self.ctx.index.files), ref.draft or "")
+
     # r[impl proposal.progress+2]
-    # r[impl proposal.change]
+    # r[impl proposal.change+2]
     def progress(self) -> Progress:
         """How far the code it proposes has got: proposed, written, settled."""
         proposals = [r for r in self.refs if r.kind == "proposal"]
+        made = [self.made(r) for r in proposals]
         return Progress(
-            proposed=sum(1 for r in proposals if not r.symbol or r.change),
-            written=sum(1 for r in proposals if r.symbol and not r.change),
+            proposed=made.count(False),
+            written=made.count(True),
             settled=sum(1 for r in self.refs if r.settled),
         )
 
@@ -469,11 +567,22 @@ class Walk:
         kind, _, did = ref.partition(":")
         return next((d for d in terms.parse(self.rel, self.text) if d.kind[0] == kind and d.id == did), None)
 
-    # r[impl prd.check]
+    @property
+    def done(self) -> bool:
+        """Whether it's a PRD whose work is done: at the work stage, with every proposal settled."""
+        if self.meta.kind != "prd" or self.meta.stage != "work":
+            return False
+        p = self.progress()
+        return p.settled == p.total
+
+    # r[impl prd.check+2]
     # r[impl prd.stage-gate]
     def prd_problems(self) -> list[Problem]:
-        """A PRD's spec checked against the spec, and anything written ahead of its stage."""
-        if self.meta.kind != "prd":
+        """A PRD's spec checked against the spec, and anything written ahead of its stage.
+
+        A done PRD isn't: it's the record of why, and the spec has moved on since.
+        """
+        if self.meta.kind != "prd" or self.done:
             return []
         from codewalk.walk.prd import spec_changes
 
@@ -491,6 +600,14 @@ class Walk:
             self.meta = FrontMatter.model_validate(yaml.safe_load(content) or {})
         except (yaml.YAMLError, ValidationError) as e:
             self.meta_error = f"front matter: {str(e).splitlines()[0]}"
+            return
+        if self.meta.at:
+            pinned = self.ctx.at(self.meta.at)
+            if pinned is None:
+                # r[impl pin.broken]
+                self.meta_error = f"`at: {self.meta.at}` names no commit in the project's repository"
+            else:
+                self.ctx = pinned
 
     @property
     def title(self) -> str:
@@ -548,6 +665,7 @@ class Walk:
     # r[impl proposal.pending]
     # r[impl glossary.errors]
     # r[impl proposal.draft+2]
+    # r[impl check.whole-file]
     def problems(self) -> list[Problem]:
         out = []
         if self.meta_error:
@@ -575,7 +693,10 @@ class Walk:
                 out.append(Problem(severity="warning", line=ref.line, message=message, ref=ref.target))
             if ref.change:
                 if ref.symbol:
-                    message = f"a change to `{ref.target}` is proposed, not settled yet"
+                    if self.made(ref):
+                        message = f"the change to `{ref.target}` is made now: settle the proposal"
+                    else:
+                        message = f"a change to `{ref.target}` is proposed, not made yet"
                     out.append(Problem(severity="pending", line=ref.line, message=message, ref=ref.target))
                     continue
             elif ref.proposed:
@@ -587,8 +708,7 @@ class Walk:
                         )
                     )
                     continue
-                ambiguous = len(ref.candidates) > 1 and all(c.name == ref.target.split("::")[-1] for c in ref.candidates)
-                if not ambiguous:
+                if not ref.ambiguous:
                     if ref.kind == "proposal":
                         out.append(
                             Problem(
@@ -597,6 +717,9 @@ class Walk:
                         )
                     continue
             if ref.symbol:
+                if ref.kind == "embed" and ref.symbol.kind == "file" and not (ref.sig or ref.focus):
+                    message = f"`{ref.target}` shows the whole file: link it inline, or show part of it with `sig` or `> text`"
+                    out.append(Problem(severity="warning", line=ref.line, message=message, ref=ref.key))
                 if ref.kind == "embed":
                     reviewed = self.ctx.review.get(self.rel, ref.key)
                     if reviewed and reviewed.digest != ref.symbol.digest(self.ctx.index.files):
@@ -606,8 +729,9 @@ class Walk:
                             )
                         )
                 continue
-            ambiguous = ref.candidates and all(c.name == ref.target.split("::")[-1] for c in ref.candidates)
-            message = f"`{ref.target}` names {len(ref.candidates)} symbols: qualify it" if ambiguous else f"`{ref.target}` names nothing"
+            message = (
+                f"`{ref.target}` names {len(ref.candidates)} symbols: qualify it" if ref.ambiguous else f"`{ref.target}` names nothing"
+            )
             out.append(
                 Problem(
                     severity="error",
@@ -657,6 +781,7 @@ class Walk:
             return os.path.relpath(self.ctx.root / file, base) + f"#L{line}"
 
         embeds = {r.line: r for r in self.embeds}
+        definitions = {r.line: r for r in self.refs if r.block}
         proposals = {r.line - 1: r for r in self.refs if r.kind == "proposal"}
         out_lines = []
         lines = self.text.split("\n")
@@ -691,8 +816,19 @@ class Walk:
             if line.strip() == "```walk":
                 j = i + 1
                 blocks = []
+                rows: list[str] = []
                 while j < len(lines) and lines[j].strip() != "```":
-                    if ref := embeds.get(j + 1):
+                    # r[impl embed.definitions]
+                    if (ref := definitions.get(j + 1)) and (d := ref.definition):
+                        rows.append(f"| {definition_cell(d, link(d.file, d.line))} | {table_text(d.text)} |")
+                        j += 1
+                        continue
+                    if rows:
+                        blocks.append(definition_table(rows))
+                        rows = []
+                    if ref := definitions.get(j + 1):
+                        blocks.append(f"> **Unresolved:** `{ref.target}`")
+                    elif ref := embeds.get(j + 1):
                         if req := ref.requirement:
                             blocks.append(f"> [`{req.id}`]({link(req.file, req.line)}): {req.text}")
                         elif sym := ref.symbol:
@@ -706,6 +842,8 @@ class Walk:
                         else:
                             blocks.append(f"> **Unresolved:** `{ref.key}`")
                     j += 1
+                if rows:
+                    blocks.append(definition_table(rows))
                 out_lines.append("\n\n".join(blocks))
                 i = j + 1
                 continue
@@ -759,8 +897,8 @@ def set_front_matter(text: str, key: str, value: str) -> str:
     return "\n".join(["---", f"{key}: {value}", "---", "", *lines])
 
 
-# r[impl proposal.settle]
-# r[impl proposal.change]
+# r[impl proposal.settle+2]
+# r[impl proposal.change+2]
 def settle(text: str, line: int, target: str) -> str:
     """`text` with the `walk proposed` (or `walk proposed change`) block whose name is on `line` settled.
 
@@ -783,8 +921,73 @@ def settle(text: str, line: int, target: str) -> str:
     """
     lines = text.split("\n")
     start = next(i for i in range(line - 1, -1, -1) if lines[i].strip().startswith("```walk proposed"))
-    lines[start] = re.sub(r"walk proposed(?: change)?", "walk settled", lines[start], count=1)
+    # A change stays one, so unsettling it gives back what it was
+    lines[start] = re.sub(r"walk proposed( change)?", r"walk settled\1", lines[start], count=1)
     lines[line - 1] = target
+    return "\n".join(lines)
+
+
+# r[impl proposal.change+2]
+def matches_draft(code: str, draft: str) -> bool:
+    """Whether code is as its draft says: the same lines, leaving out blank lines and each
+    line's indentation, with a comment line in the draft containing `…` matching any lines.
+
+    Parameters
+    ----------
+    code : str
+        The code as it is.
+    draft : str
+        The draft, which may leave lines out with `// … as now …`.
+
+    Returns
+    -------
+    bool
+        Whether they match.
+    """
+    have = [l.strip() for l in code.split("\n") if l.strip()]
+    want = [l.strip() for l in draft.split("\n") if l.strip()]
+
+    def gap(line: str) -> bool:
+        return line.startswith(("//", "#")) and "…" in line
+
+    # Whether want[i:] matches have[j:]
+    memo: dict[tuple[int, int], bool] = {}
+
+    def match(i: int, j: int) -> bool:
+        if (i, j) not in memo:
+            if i == len(want):
+                memo[i, j] = j == len(have)
+            elif gap(want[i]):
+                memo[i, j] = any(match(i + 1, k) for k in range(j, len(have) + 1))
+            else:
+                memo[i, j] = j < len(have) and want[i] == have[j] and match(i + 1, j + 1)
+        return memo[i, j]
+
+    return match(0, 0)
+
+
+# r[impl proposal.unsettle]
+def unsettle(text: str, line: int) -> str:
+    """`text` with the `walk settled` block whose name is on `line` a proposal again.
+
+    It becomes `walk proposed change` if it was settled from one, else `walk proposed`, with
+    its name and draft as they are.
+
+    Parameters
+    ----------
+    text : str
+        The codewalk's Markdown.
+    line : int
+        The line the settled block's name is on, 1-based.
+
+    Returns
+    -------
+    str
+        The Markdown with the block a proposal again.
+    """
+    lines = text.split("\n")
+    start = next(i for i in range(line - 1, -1, -1) if lines[i].strip().startswith("```walk settled"))
+    lines[start] = re.sub(r"walk settled( change)?", r"walk proposed\1", lines[start], count=1)
     return "\n".join(lines)
 
 

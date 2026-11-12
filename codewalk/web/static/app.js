@@ -13,10 +13,16 @@
     get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
     set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
   };
+  // The path this project's pages are under: nothing when the server has one project,
+  // `/p/<name>` when it's one of a workspace's
+  const BASE = data.base || "";
+  // A pinned codewalk's ref, so the files opened beside it are read where it's pinned
+  const AT = data.at ? `&at=${encodeURIComponent(data.at)}` : "";
   // The reading view for this page's file: a codewalk, or a spec
   const reading = () => (data.spec ? "spec" : "walk");
-  const api = async (path, body) => {
-    const res = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  // A request to this project's server; `raw` for one to the workspace's, unprefixed
+  const api = async (path, body, raw = false) => {
+    const res = await fetch((raw ? "" : BASE) + path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   };
@@ -104,7 +110,7 @@
   const panel = $("#context");
   let panelFile = null;
   // Pygments' classes for names: plain, functions, classes, namespaces, others, decorators
-  const NAME = /^(n|nf|nc|nn|nx|nd|ne|fm)$/;
+  const NAME = /^(n|nf|nc|nn|nx|nd|ne|fm|no)$/;
 
   // r[impl ui.context]
   // r[impl ui.context-place]
@@ -130,7 +136,7 @@
   async function openContext({ file, start, end, line, focusRef }) {
     if (!panel) return;
     hideCard();
-    const view = await api(`/api/file?path=${encodeURIComponent(file)}`);
+    const view = await api(`/api/file?path=${encodeURIComponent(file)}${AT}`);
     panelFile = view;
     const place = panel.hidden && data.view !== "edit" ? readingPlace() : null;
     panel.hidden = false;
@@ -145,7 +151,7 @@
         <span class="ctx-file" title="${esc(file)}">${esc(file)}</span>
         <span class="spacer"></span>
         <button class="act" data-action="toggle-outline" title="Show or hide this file's outline (o)">Outline</button>
-        <a class="act" href="${esc(view.zed)}:${line || 1}" title="Open in Zed">Zed</a>
+        ${view.zed ? `<a class="act" href="${esc(view.zed)}:${line || 1}" title="Open in Zed">Zed</a>` : ""}
         <button class="ctx-close" data-action="close-context" title="Close (Esc)">×</button>
       </div>
       <div class="ctx-body">
@@ -201,6 +207,91 @@
 
   // ---- Palette ---------------------------------------------------------------------------
 
+  // ---- Projects ----------------------------------------------------------------------
+
+  // r[impl ui.project]
+  // r[impl ui.project-add]
+  // In a workspace, the top bar picks the project to read, or adds one: a folder of the
+  // workspace's gets a `codewalk.toml`, with the folders its codewalks and specs are in
+  const pick = $("[data-project-pick]");
+  if (pick) {
+    const current = pick.value;
+    pick.addEventListener("change", () => {
+      if (pick.value) { location.href = `/p/${encodeURIComponent(pick.value)}/`; return; }
+      pick.value = current;
+      addProject();
+    });
+  }
+  async function addProject() {
+    const { candidates } = await api("/api/workspace", null, true);
+    const back = document.createElement("div");
+    back.className = "palette-back";
+    const options = (list, chosen, none) =>
+      (none ? `<option value="">${esc(none)}</option>` : "") +
+      list.map((f) => `<option value="${esc(f)}"${f === chosen ? " selected" : ""}>${esc(f)}</option>`).join("");
+    back.innerHTML = `<form class="palette add-project">
+      <h3>Add a project</h3>
+      ${candidates.length ? `
+      <label>Folder <select name="folder">${options(candidates.map((c) => c.name))}</select></label>
+      <label>Codewalks in <select name="docs"></select></label>
+      <label>Specs in <select name="specs"></select></label>
+      <p class="ph" data-sources></p>
+      <div class="buttons"><button type="button" class="tb" data-cancel>Cancel</button><button class="tb primary">Add</button></div>`
+      : `<p class="ph">Every folder here is a project already.</p>
+      <div class="buttons"><button type="button" class="tb" data-cancel>Close</button></div>`}
+      <p class="ph error" data-error hidden></p>
+    </form>`;
+    document.body.append(back);
+    const form = $("form", back);
+    const close = () => back.remove();
+    const fill = () => {
+      const c = candidates.find((c) => c.name === form.folder.value);
+      if (!c) return;
+      form.docs.innerHTML = options(c.folders, c.folders.includes("docs") ? "docs" : c.folders[0]);
+      form.specs.innerHTML = options(c.folders, c.folders.includes("docs/spec") ? "docs/spec" : "", "None");
+      $("[data-sources]", form).textContent = `Code: ${c.sources.join(", ")}`;
+    };
+    if (candidates.length) { form.folder.addEventListener("change", fill); fill(); }
+    $("[data-cancel]", form).addEventListener("click", close);
+    back.addEventListener("click", (e) => { if (e.target === back) close(); });
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        const r = await api("/api/workspace/projects", { folder: form.folder.value, docs: form.docs.value, specs: form.specs.value }, true);
+        location.href = r.href;
+      } catch (err) {
+        const box = $("[data-error]", form);
+        box.hidden = false;
+        box.textContent = (() => { try { return JSON.parse(err.message).error; } catch { return err.message; } })();
+      }
+    });
+  }
+
+  // ---- Reading a branch's worktrees ---------------------------------------------------
+
+  // r[impl review.branch-pick]
+  // The code as it's checked out, or a branch's worktrees across the project's
+  // repositories: each symbol shown is then what the branch changed in it
+  async function chooseBranch() {
+    const { current, branches } = await api("/api/branches");
+    const back = document.createElement("div");
+    back.className = "palette-back";
+    const item = (name, label, sub) =>
+      `<li data-branch="${esc(name)}"${name === (current || "") ? ' class="sel"' : ""}><span class="pr">${esc(label)}</span><span class="pw">${esc(sub)}</span></li>`;
+    back.innerHTML = `<div class="palette branches"><h3>Read the code from</h3><ul>
+      ${item("", "as checked out", "each repository as it is")}
+      ${branches.map((b) => item(b.name, b.name, `${b.repos.join(", ")} · against ${b.base.join(", ")}`)).join("")}
+    </ul>${branches.length ? "" : '<p class="ph">No branch has a worktree in this project\'s repositories.</p>'}</div>`;
+    document.body.append(back);
+    back.addEventListener("click", async (e) => {
+      if (e.target === back) { back.remove(); return; }
+      const li = e.target.closest("li[data-branch]");
+      if (!li) return;
+      await api("/api/branch", { branch: li.dataset.branch || null });
+      location.reload();
+    });
+  }
+
   function palette() {
     const back = document.createElement("div");
     back.className = "palette-back";
@@ -240,6 +331,14 @@
   document.addEventListener("click", async (e) => {
     const sym = e.target.closest("a.sym");
     if (sym) { e.preventDefault(); return contextFor(sym.dataset.ref); }
+    // r[impl ui.context-link]
+    // A link to a source file: beside the page, at its lines, unless asked for a new tab
+    const src = e.target.closest("a.srclink");
+    if (src && !(e.metaKey || e.ctrlKey || e.shiftKey)) {
+      e.preventDefault();
+      const start = +src.dataset.start || 0;
+      return openContext({ file: src.dataset.file, start, end: +src.dataset.end || start, line: start || 1 });
+    }
     // A name in the code: show the symbol it names, if codewalk can tell which
     const name = e.target.closest(".lc span");
     if (name && NAME.test(name.className) && !getSelection().toString()) {
@@ -248,7 +347,7 @@
       const file = fig ? data.symbols?.[fig.dataset.ref]?.file : name.closest("#context") ? panelFile?.file : null;
       if (file && row?.dataset.line) {
         try {
-          const s = await api(`/api/named?name=${encodeURIComponent(name.textContent.trim())}&file=${encodeURIComponent(file)}&line=${row.dataset.line}`);
+          const s = await api(`/api/named?name=${encodeURIComponent(name.textContent.trim())}&file=${encodeURIComponent(file)}&line=${row.dataset.line}${AT}`);
           return openContext(s);
         } catch { return toast(`Not sure which ${name.textContent.trim()} that is`); }
       }
@@ -259,7 +358,7 @@
       e.preventDefault();
       const r = data.requirements?.[req.dataset.req];
       if (e.altKey) return copy(req.dataset.req, "Requirement");
-      if (r) location.href = `/spec/${r.file}?req=${encodeURIComponent(req.dataset.req)}`;
+      if (r) location.href = `${BASE}/spec/${r.file}?req=${encodeURIComponent(req.dataset.req)}`;
       return;
     }
     const go = e.target.closest("[data-go]");
@@ -291,10 +390,19 @@
     else if (action === "copy" && fig) copy(fig.dataset.ref, "Reference copied");
     else if (action === "copy-text") copy(btn.dataset.text, "Reference copied");
     else if (action === "diff" && fig) { const d = $("pre.diff:not(.plan)", fig); d.hidden = !d.hidden; }
+    else if (action === "as-written" && fig) {
+      fig.classList.toggle("as-written");
+      btn.textContent = fig.classList.contains("as-written") ? "as prose" : "as written";
+    }
     else if (action === "plan" && fig) { const d = $("pre.plan", fig); d.hidden = !d.hidden; }
     else if (action === "review" && fig) {
       await api("/api/review", { path: data.doc, ref: fig.dataset.ref });
       toast(`Marked reviewed: ${fig.dataset.ref}`);
+      refresh();
+    } else if (action === "reopen" && fig) {
+      // r[impl review.reopen]
+      await api("/api/reopen", { path: data.doc, ref: fig.dataset.ref });
+      toast(`Reopened: ${fig.dataset.ref}`);
       refresh();
     } else if (action === "review-all") {
       const r = await api("/api/review", { path: data.doc });
@@ -304,6 +412,7 @@
     else if (action === "toggle-outline") toggleOutline();
     else if (action === "toggle-margin") toggleMargin();
     else if (action === "palette") palette();
+    else if (action === "branch") chooseBranch();
     else if (action === "theme") toggleTheme();
     else if (action === "save") save();
     else if (action === "edit" || action === "done") { e.preventDefault(); location.href = here(action === "edit" ? "edit" : reading()); }
@@ -334,10 +443,15 @@
       // r[impl prd.from-thread]
       prdFromThread(btn.closest(".thread"));
     } else if (action === "new-prd") {
-      // r[impl prd.start]
+      // r[impl prd.start+2]
       const form = $("#new-prd");
       form.hidden = false;
       $("input[name=title]", form).focus();
+    } else if (action === "unsettle" && fig) {
+      // r[impl proposal.unsettle]
+      const r = await api("/api/unsettle", { path: data.doc, line: +fig.dataset.md });
+      toast(`Unsettled: ${r.unsettled} is proposed again`);
+      refresh();
     } else if (action === "settle" && fig) {
       const r = await api("/api/settle", { path: data.doc, line: +fig.dataset.md });
       toast(`Settled: ${r.settled} is an ordinary excerpt now`);
@@ -362,7 +476,7 @@
     form.className = "new-prd";
     form.innerHTML = `<label>Title <input name="title" required autocomplete="off" placeholder="What the change is, in a few words"></label>
       <label>What you want <textarea name="ask" rows="4" required></textarea></label>
-      <p class="hint">A PRD at <code>docs/prd/</code>, at the problem stage, linked to and from this thread.</p>
+      <p class="hint">A PRD at <code>docs/prds/</code>, at the problem stage, linked to and from this thread.</p>
       <div class="cp-foot"><span class="np-error"></span><button type="button" class="tb" data-role="cancel">Cancel</button><button class="tb primary">Start it</button></div>`;
     form.ask.value = first;
     thread.appendChild(form);
@@ -556,15 +670,50 @@
 
   // ---- Contents: the section you're in -------------------------------------------------------
 
-  const tocLinks = $$(".toc a");
+  // r[impl ui.contents]
+  // The section you're in is the last whose heading is at or above the top quarter of the
+  // window, worked out from where the page is, so it's right however you got there
+  const tocLinks = $$(".toc a[href^='#']");
   if (tocLinks.length) {
-    const spy = new IntersectionObserver((entries) => {
-      for (const en of entries) {
-        if (!en.isIntersecting) continue;
-        tocLinks.forEach((a) => a.classList.toggle("active", a.getAttribute("href") === `#${en.target.id}`));
+    let shown = null;
+    const mark = () => {
+      // Found afresh each time: a live update replaces the page's headings
+      const heads = tocLinks.map((a) => document.getElementById(decodeURIComponent(a.getAttribute("href").slice(1)))).filter(Boolean);
+      if (!heads.length) return;
+      const bar = $(".topbar").getBoundingClientRect().bottom;
+      const atEnd = innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
+      const line = atEnd ? innerHeight : bar + (innerHeight - bar) / 4;
+      const passed = heads.filter((h) => h.getBoundingClientRect().top <= line);
+      const at = passed[passed.length - 1] || heads[0];
+      if (at === shown) return;
+      shown = at;
+      let active = null;
+      tocLinks.forEach((a) => {
+        const on = decodeURIComponent(a.getAttribute("href").slice(1)) === at.id;
+        a.classList.toggle("active", on);
+        if (on) active = a;
+      });
+      // Keep it in view in the contents, which scroll on their own
+      const toc = active?.closest(".toc");
+      if (toc) {
+        const a = active.getBoundingClientRect(), box = toc.getBoundingClientRect();
+        if (a.top < box.top + 40 || a.bottom > box.bottom - 20) toc.scrollTop += a.top - box.top - box.height / 3;
       }
-    }, { rootMargin: "-50px 0px -70% 0px" });
-    $$(".prose h2[id], .prose h3[id]").forEach((h) => spy.observe(h));
+    };
+    // At once, then at most every 50 ms while scrolling, and once more after it stops
+    let last = 0, after = null;
+    const soon = () => {
+      const now = Date.now();
+      if (now - last > 50) { last = now; mark(); }
+      clearTimeout(after);
+      after = setTimeout(mark, 60);
+    };
+    addEventListener("scroll", soon, { passive: true });
+    addEventListener("resize", soon);
+    addEventListener("hashchange", soon);
+    // Once the page has its final layout, and so its headings their places
+    addEventListener("load", soon);
+    mark();
   }
 
   // ---- Keeping your place between reading and editing ----------------------------------------
@@ -577,7 +726,7 @@
     return el ? +el.dataset.md : 1;
   }
   // r[impl ui.place]
-  function here(view) { return `/${view}/${data.doc}?line=${topLine()}`; }
+  function here(view) { return `${BASE}/${view}/${data.doc}?line=${topLine()}`; }
   // The rendered block a line of Markdown is in: the last one starting at or before it
   function blockAt(line) {
     let best = null;
@@ -675,7 +824,7 @@
     return out;
   }
   if (data.view === "walk" || data.view === "spec" || data.view === "edit") {
-    const events = new EventSource("/events");
+    const events = new EventSource(`${BASE}/events`);
     events.onmessage = async (e) => {
       const ev = JSON.parse(e.data);
       const mine = ev.docs.includes(data.doc);

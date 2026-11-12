@@ -9,7 +9,9 @@ it stands, so a reader sees what's new, what changes and what goes.
 from __future__ import annotations
 
 import re
+from datetime import date
 from importlib import resources
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
@@ -19,7 +21,7 @@ from codewalk.walk import notes
 from codewalk.walk.doc import Context, Walk
 
 # Where the browser starts a PRD, from the root
-FOLDER = "docs/prd"
+FOLDER = "docs/prds"
 
 
 class SpecChange(BaseModel):
@@ -87,9 +89,45 @@ def slug(title: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
 
 
-# r[impl prd.start]
-def start(ctx: Context, title: str, ask: str) -> str:
-    """Start a PRD at `docs/prd/` and the title's slug, with what was asked as a request.
+def name(folder: Path, title: str, day: date) -> str:
+    """A new PRD's file name: the day, its number that day, and the title's slug.
+
+    Parameters
+    ----------
+    folder : Path
+        The PRDs' folder.
+    title : str
+        The PRD's title.
+    day : date
+        The day it's started.
+
+    Returns
+    -------
+    str
+        As `2026-11-12-1-stop-a-battery.md`: one more than the highest number of that day's
+        PRDs, or 1.
+
+    Raises
+    ------
+    FileExistsError
+        If a PRD of the same slug was started that day.
+    ValueError
+        If the title has nothing a file can be named from.
+    """
+    s = slug(title)
+    if not s:
+        raise ValueError("a PRD needs a title with a letter or a number in it")
+    taken = [m for p in folder.glob(f"{day.isoformat()}-*.md") if (m := re.fullmatch(rf"{day.isoformat()}-(\d+)-(.+)\.md", p.name))]
+    if any(m.group(2) == s for m in taken):
+        raise FileExistsError(f"a PRD called {s} was started on {day.isoformat()}")
+    n = max((int(m.group(1)) for m in taken), default=0) + 1
+    return f"{day.isoformat()}-{n}-{s}.md"
+
+
+# r[impl prd.start+2]
+def start(ctx: Context, title: str, ask: str, day: date | None = None) -> str:
+    """Start a PRD in `docs/prds/`, named by the day, its number that day and the title's
+    slug, with what was asked as a request.
 
     Parameters
     ----------
@@ -99,6 +137,8 @@ def start(ctx: Context, title: str, ask: str) -> str:
         Its title.
     ask : str
         What the person wants, in their own words.
+    day : date or None
+        The day it's started; today if None.
 
     Returns
     -------
@@ -108,17 +148,12 @@ def start(ctx: Context, title: str, ask: str) -> str:
     Raises
     ------
     FileExistsError
-        If there's a PRD there already.
+        If a PRD of the same slug was started that day.
     ValueError
         If the title has nothing a file can be named from.
     """
-    name = slug(title)
-    if not name:
-        raise ValueError("a PRD needs a title with a letter or a number in it")
-    rel = f"{FOLDER}/{name}.md"
+    rel = f"{FOLDER}/{name(ctx.root / FOLDER, title, day or date.today())}"
     target = ctx.root / rel
-    if target.exists():
-        raise FileExistsError(rel)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(notes.request(template(title), ctx.config.who(ctx.root), ask))
     return rel

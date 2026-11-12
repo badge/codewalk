@@ -35,14 +35,16 @@ them, in the thread under it, which starts one if there's none. Until it's writt
 proposal is then agreed, and says so on the page and in `codewalk context`, so the agent
 knows it can be written (`proposal.agree`). Once it does, the proposal shows what was written against the
 draft, and can be settled: the block becomes `walk settled`, keeping the draft, so what
-was planned and what was done stay side by side (`proposal.settle`). A PRD's progress is
+was planned and what was done stay side by side (`proposal.settle`). Settling is undone
+the same way: the block goes back to the proposal it was (`proposal.unsettle`). A PRD's progress is
 how much of what it proposes is written and settled, and only a PRD shows it
 (`proposal.progress`).
 
 A change to code that exists is proposed in a `walk proposed change` block, under the name
 it has. It shows what there is, then what there will be: the difference from the code as
-it is to the draft. It stays proposed until it's settled, since code that exists can't
-say whether the change has been made (`proposal.change`).
+it is to the draft. It's made once the code matches the draft, line for line, and only
+then can it be settled. A draft can leave out what doesn't change with a comment saying
+so, `// … as now …`, which stands for any lines (`proposal.change`).
 
 ### What's in hand
 
@@ -123,6 +125,11 @@ A `walk proposed` block MUST be read as a proposal: its first line the name the 
 have, the rest its draft. One in a codewalk that isn't a PRD MUST be reported as a
 warning.
 
+r[proposal.indent]
+A proposal's draft MUST be shown, and compared with its symbol's code, without the
+indentation its lines share, as the code is shown without its own; so a draft indented as
+the code sits in its file differs only where the code would change.
+
 r[proposal.pending]
 A proposal whose name doesn't resolve MUST be reported as in hand, not as broken.
 
@@ -132,16 +139,23 @@ the thread directly after its block, starting one there if there's none. A propo
 yet written, with a decision in that thread, MUST be shown as agreed, and `codewalk
 context` MUST list it as agreed, with the decision.
 
-r[proposal.settle]
+r[proposal.settle+2]
 Settling a written proposal MUST turn its block into `walk settled`, keeping the draft,
-and a settled block MUST show the code as it is, with the difference from its draft.
+and `walk settled change` for a `walk proposed change`; a settled block MUST show the code
+as it is, with the difference from its draft.
 
-r[proposal.change]
+r[proposal.unsettle]
+A settled block MUST offer to unsettle it, which MUST turn it back into `walk proposed`,
+or `walk proposed change` if it was settled from one, keeping its name and draft.
+
+r[proposal.change+2]
 A `walk proposed change` block MUST be read as a change proposed to the symbol it names,
 showing the difference from the symbol's code as it is to the draft, so what the change
-adds shows as added and what it takes out as removed, and counted as proposed until it's
-settled; settling it MUST turn it into a `walk settled` block, keeping the draft. A
-change to a name that doesn't resolve MUST be reported as broken.
+adds shows as added and what it takes out as removed. It MUST be counted as proposed until
+the code matches the draft, and as written once it does, and MUST offer to be settled only
+then. The code matches when their lines are the same, leaving out blank lines and each
+line's indentation, with a comment line in the draft containing `…` matching any lines,
+none included. A change to a name that doesn't resolve MUST be reported as broken.
 
 r[proposal.progress+2]
 A PRD's progress MUST be counted as how many of its proposals are not written, written

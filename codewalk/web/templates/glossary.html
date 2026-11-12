@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block crumb %}<a href="/">Codewalks</a> / glossary{% endblock %}
+{% block crumb %}<a href="{{ base() }}/">Codewalks</a> / glossary{% endblock %}
 {% block body %}
 <main class="index glossary">
   <h1>Glossary</h1>
@@ -12,23 +12,23 @@
 
   {% for grp in groups %}
   <section class="gl-group">
-    <h2 class="folder-name"><a href="/{{ grp.view }}/{{ grp.rel }}">{{ grp.title }}</a> <span class="where">{{ grp.rel }}</span></h2>
+    <h2 class="folder-name"><a href="{{ base() }}/{{ grp.view }}/{{ grp.rel }}">{{ grp.title }}</a> <span class="where">{{ grp.rel }}</span></h2>
     {% for d in grp.terms %}
     <div class="gl-item" id="t-{{ slug(d.id) }}" data-search="{{ (d.id ~ ' ' ~ d.text) | lower }}">
       <div class="gl-head"><span class="kind k-term">term</span><b>{{ d.words }}</b>
-        <span class="spacer"></span><a class="where" href="/{{ grp.view }}/{{ d.file }}#t-{{ slug(d.id) }}">{{ d.file }}:{{ d.line }}</a></div>
+        <span class="spacer"></span><a class="where" href="{{ base() }}/{{ grp.view }}/{{ d.file }}#t-{{ slug(d.id) }}">{{ d.file }}:{{ d.line }}</a></div>
       <div class="gl-text">{{ text(d.text) }}</div>
       {% set u = uses.get("t:" ~ d.id, []) %}
-      {% if u %}<div class="gl-uses">Used in {% for r in u %}<a href="/{{ view_of(r) }}/{{ r }}">{{ r }}</a>{% endfor %}</div>{% endif %}
+      {% if u %}<div class="gl-uses">Used in {% for r in u %}<a href="{{ base() }}/{{ view_of(r) }}/{{ r }}">{{ r }}</a>{% endfor %}</div>{% endif %}
     </div>
     {% endfor %}
     {% for d in grp.facts %}
     <div class="gl-item" id="f-{{ slug(d.id) }}" data-search="{{ (d.id ~ ' ' ~ d.text ~ ' ' ~ d.status) | lower }}">
       <div class="gl-head"><span class="kind k-fact">fact</span><b>{{ d.id }}</b><span class="status s-{{ d.status }}">{{ d.status }}</span>
-        <span class="spacer"></span><a class="where" href="/{{ grp.view }}/{{ d.file }}#f-{{ slug(d.id) }}">{{ d.file }}:{{ d.line }}</a></div>
+        <span class="spacer"></span><a class="where" href="{{ base() }}/{{ grp.view }}/{{ d.file }}#f-{{ slug(d.id) }}">{{ d.file }}:{{ d.line }}</a></div>
       <div class="gl-text">{{ text(d.text) }}</div>
       {% set u = uses.get("f:" ~ d.id, []) %}
-      {% if u %}<div class="gl-uses">Relied on in {% for r in u %}<a href="/{{ view_of(r) }}/{{ r }}">{{ r }}</a>{% endfor %}</div>
+      {% if u %}<div class="gl-uses">Relied on in {% for r in u %}<a href="{{ base() }}/{{ view_of(r) }}/{{ r }}">{{ r }}</a>{% endfor %}</div>
       {% else %}<div class="gl-uses none">Nothing cites it yet</div>{% endif %}
     </div>
     {% endfor %}

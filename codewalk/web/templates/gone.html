@@ -1,0 +1,24 @@
+{# A reference to a symbol the branch being read removed or renamed: what it was where
+   the branch started, shown removed. #}
+<figure class="walk gone" data-md="{{ ref.line }}">
+<figcaption>
+  <div class="cap-main">
+    <span class="kind k-{{ s.kind }}">{{ s.kind }}</span>
+    <span class="path" title="{{ s.qualified }}">
+      {%- for text, cls in parts -%}
+        <span class="{{ cls }}">{{ text }}</span>{% if not loop.last %}<span class="sep">::</span><wbr>{% endif %}
+      {%- endfor -%}
+    </span>
+  </div>
+  <div class="cap-sub">
+    <span class="loc">{{ s.file }}</span>
+    <span class="spacer"></span>
+    <span class="badge branch-gone" title="Not on {{ branch }}: as it was at {{ base }}, where the branch started">gone on {{ branch }}</span>
+  </div>
+</figcaption>
+<pre class="diff branch"><code>
+{%- for row in rows -%}
+<span class="drow {{ row.kind }}"><span class="dt">{{ row.tag }}</span>{{ row.text or " " }}</span>
+{%- endfor -%}
+</code></pre>
+</figure>

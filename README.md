@@ -36,6 +36,31 @@ Then open <http://localhost:4471>. Everything stays local: the server listens on
 127.0.0.1 only. The only files it writes are codewalks and specs, when you save one in
 the browser, and `codewalk.review.json`. Ctrl-C stops it.
 
+To serve several repositories at once, run it from the folder they're in instead, if
+that folder has no `codewalk.toml` of its own. Every folder one level below with a
+`codewalk.toml` is a project, served under `/p/<folder>/`, and the top bar picks the
+project to read. Its last entry, **Add project…**, makes another folder a project: you
+choose the folders its codewalks and specs are in, and codewalk writes its
+`codewalk.toml`, guessing where its code is from what's at its root.
+
+```bash
+cd ~/projects && codewalk serve
+```
+
+To review work on a branch, choose it from **Code:** in the top bar. It lists every
+branch with a worktree in any of the project's repositories: its own, and each one
+beside it that a `../` source glob reaches. While a branch is chosen, the code in those
+repositories is read from their worktrees, under the same names, and each symbol a
+codewalk shows is compared with the same symbol where the branch started (the commit it
+shares with the branch it was made from, or with the default branch):
+
+- **changed**: the code is shown as a diff;
+- **new** or **unchanged**: shown as it is, labelled;
+- **gone**: a name the branch removed or renamed is shown as it was, removed.
+
+The choice is the server's, for every page of the project, and nothing is written; choose
+**as checked out** to go back.
+
 | Command                               | What it does                                                   |
 | ------------------------------------- | -------------------------------------------------------------- |
 | `codewalk serve [--port 4471]`        | The web view, with editing and live reload                     |
@@ -77,7 +102,10 @@ Renderer::embed > if ref.sig
 **Names.** A name is any tail of a symbol's path that names only it: `embed_line` if
 there's one, `Renderer::embed` if there are several `embed`s. Methods and fields keep
 their class (`Walk::problems`, `FrontMatter::weight`). In Rust, an impl block is `impl`
-and its type. To pin one down further:
+and its type. A file is a symbol too, named by its module (`codewalk::web::render`), with
+its module docs, or by its path or any tail of it (`web/render.py`); a crate's root
+(`src/lib.rs`) only by its path. Where a file and an item in it share a name, the name
+means the item. To pin one down further:
 
 | Write                    | To mean                                                     |
 | ------------------------ | ----------------------------------------------------------- |
@@ -88,8 +116,14 @@ and its type. To pin one down further:
 
 | After the name  | Shows                                                                     |
 | --------------- | ------------------------------------------------------------------------- |
-| `sig`           | Its outline: for Python, its header and docstring, and for a class, its fields and `__init__`'s header and docstring too; for Rust, its doc comments and first line |
+| `sig`           | Its outline: for Python, its header and docstring, and for a class, its fields and `__init__`'s header and docstring too; for Rust, its doc comments and first line; for a file, its module docs |
 | `> some text`   | Only part of it: from the first line containing the text, with the comments just above it, through the end of the block that line opens |
+
+A whole file in a `walk` block is a warning: link a file inline, or show part of it.
+In an excerpt, docs read as prose: Rust's doc comments as Markdown, with their code
+highlighted and their intra-doc links linked, and a NumPy-style Python docstring with
+each entry's name and type as code. **as written** in the excerpt's caption shows their
+lines instead.
 
 A name that's ambiguous or names nothing is an error. `check` and the editor list the
 candidates, and the page shows them in place of the code.
@@ -106,6 +140,12 @@ related: [data_model.md]   # paths from this file
 weight: 10   # where it goes in its folder: lighter first, then the rest by title
 ---
 ```
+
+**Pinning a codewalk.** A codewalk about code that's since changed or gone can be read
+at the commit it was written against: tag that commit, and put the tag in its front
+matter as `at: <tag>`. Its excerpts, its links and the files opened beside it are then
+read from git at that commit, with nothing checked out, and `check` holds it to that
+code. Code in another repository, through `../`, is still read as it's checked out.
 
 **Codewalks relate** by linking to each other, in the text or in `related`. Either
 end shows the link: what a codewalk links to, and what links to it.
@@ -124,7 +164,8 @@ def uses(self, ctx: Context, sym: Symbol) -> list[tuple[str, int]]:
 Until the name exists, it's shown as proposed and `check` lists it as in hand, not
 broken. Once it's written, the page shows the code with the draft against it, and
 **Settle** turns the block into `walk settled`: the code as written, with the draft kept,
-so **as proposed** shows what was planned against what happened. Inline, `[[?Name]]`.
+so **as proposed** shows what was planned against what happened. **Unsettle** turns it
+back into the proposal it was. Inline, `[[?Name]]`.
 
 **A PRD** is a codewalk with all its code proposed (`codewalk new --prd`): the
 problem, with the existing code named; the outcome; the spec prose it gives rise to,
@@ -176,6 +217,10 @@ A fact says how we know it: `documented`, `observed` or `assumed` (the default).
 them with `[[t:excerpt]]`, `[[f:tracey.prefix]]`, or `term:` and `fact:` links. A term is
 also linked wherever its words appear in prose (the first time in each paragraph), so any
 use of it can be hovered for what it means.
+
+Where what the spec says is the point of a passage, a `walk` block can show it whole: a
+line `r:id` shows a requirement's text, and a run of `t:id` and `f:id` lines shows one
+table of what each term or fact means, written out as a Markdown table by `codewalk export`.
 
 [`SYNTAX.md`](SYNTAX.md) has all of it as a grammar.
 
@@ -293,10 +338,11 @@ Without one, `sources` is `src/**/*.rs`; `specs` and `docs` are as above.
 | ----------------- | ------------------------------------------------------------------------ |
 | `cli.py`          | The commands, with rich-click                                            |
 | `config.py`       | `codewalk.toml`, as a Pydantic model                                     |
+| `code/worktrees.py` | A branch's worktrees across a project's repositories, and where the branch started |
 | `code/`           | The code: `index.py` parses Rust with tree-sitter into symbols, each with its span, docs and requirement markers, and resolves names; `python.py` does the same for Python; `highlight.py` highlights a file with Pygments, a line at a time, so any range can be cut out |
 | `walk/`           | Codewalks: `doc.py` parses one with markdown-it, checks it and exports it; `notes.py` reads and writes threads; `review.py` keeps the review file; `library.py` puts them all together; `brief.py` is what's in hand, for `codewalk context` |
 | `spec/`           | The spec: `requirements.py` reads them; `tracey.py` reads tracey's config; `prose.py` sets a spec's prose against its requirements (citations, gaps, drift); `trail.py` follows prose to spec to code; `terms.py` is the glossary |
-| `web/`            | The browser: `server.py`, Starlette under uvicorn, with watchfiles and server-sent events for live reload; `render.py`, a codewalk as HTML, every block tagged with its Markdown line; `templates/` in Jinja; `static/`, plain JS and CSS |
+| `web/`            | The browser: `server.py`, Starlette under uvicorn, with watchfiles and server-sent events for live reload; `render.py`, a codewalk as HTML, every block tagged with its Markdown line; `templates/` in Jinja; `static/`, plain JS and CSS; `workspace.py`, several projects served together |
 | `lsp.py`          | The language server, on pygls                                            |
 | `setup/`          | `codewalk init`, and the `AGENTS.md` section and skills it writes        |
 

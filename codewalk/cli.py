@@ -7,6 +7,7 @@ It works from the repository the current folder is in. Where it looks is set in
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import rich_click as click
 from rich.console import Console
@@ -56,15 +57,25 @@ def check(codewalks: tuple[str, ...], strict: bool) -> None:
     sys.exit(1 if errors or (strict and warnings) else 0)
 
 
-# r[impl serve.local]
+# r[impl serve.local+2]
 @main.command()
 @click.option("--port", default=4471, show_default=True, help="Port to listen on, on 127.0.0.1.")
 def serve(port: int) -> None:
     """The web view, with editing and live reload."""
+    from codewalk.config import FILE
     from codewalk.web.server import serve as run
+    from codewalk.web.server import serve_workspace
+    from codewalk.web.workspace import find_projects
 
-    ctx = context()
     url = f"http://localhost:{port}"
+    # A folder with no `codewalk.toml` of its own, but projects one level below it, is a
+    # workspace: serve them all
+    if not (repo_root() / FILE).exists() and (projects := find_projects(Path.cwd())):
+        names = ", ".join(p.name for p in projects)
+        console.print(f"codewalk: [link={url}]{url}[/link]  [dim]({len(projects)} projects: {names})[/]")
+        serve_workspace(Path.cwd(), port)
+        return
+    ctx = context()
     counts = f"{len(ctx.index.symbols)} symbols, {len(ctx.codewalks())} codewalks"
     console.print(f"codewalk: [link={url}]{url}[/link]  [dim]({counts})[/]")
     run(ctx, port)

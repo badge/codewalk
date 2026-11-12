@@ -8,11 +8,18 @@
 </head>
 <body class="page-{{ view }}">
 <header class="topbar">
-  <a class="brand" href="/">codewalk</a>
+  <a class="brand" href="{{ base() }}/">codewalk</a>
+  {% if projects %}
+  <select class="project-pick" data-project-pick title="The project to read">
+    {% for p in projects %}<option value="{{ p }}"{% if p == project %} selected{% endif %}>{{ p }}</option>{% endfor %}
+    <option value="" data-add-project>Add project…</option>
+  </select>
+  {% endif %}
+  <button class="tb code-from{% if branch %} on-branch{% endif %}" data-action="branch" title="Read the code as it's checked out, or from a branch's worktrees">Code: {{ branch or "as checked out" }}</button>
   <span class="crumb">{% block crumb %}{% endblock %}</span>
   <span class="spacer"></span>
   {% block actions %}{% endblock %}
-  <a class="tb" href="/glossary" title="Terms and facts">Glossary</a>
+  <a class="tb" href="{{ base() }}/glossary" title="Terms and facts">Glossary</a>
   <button class="tb" data-action="palette" title="Find a symbol (/)">Find symbol <kbd>/</kbd></button>
   <button class="tb" data-action="theme" title="Light or dark">◐</button>
 </header>

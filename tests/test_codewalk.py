@@ -2,7 +2,9 @@
 this project is used on."""
 
 import json
+import os
 import textwrap
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -100,6 +102,24 @@ def test_a_name_shared_by_several_symbols_is_ambiguous_with_each_as_a_candidate(
     assert len(candidates) == 2
 
 
+# r[verify ref.ambiguous]
+# r[verify ref.nearest]
+def test_a_name_whose_last_part_others_share_but_whose_path_none_has_names_nothing(repo):
+    w = walk(repo, "# W\n\nSee [[fresh::Battery::command]].\n")
+    (problem,) = [p for p in w.problems() if p.severity == "error"]
+    assert problem.message == "`fresh::Battery::command` names nothing"
+
+
+# r[verify ref.ambiguous]
+# r[verify proposal.pending]
+def test_a_proposal_whose_last_part_others_share_but_whose_path_none_has_is_pending(repo):
+    w = walk(repo, "# W\n\n```walk proposed rust\nfresh::Battery::command\npub fn command() {}\n```\n")
+    kinds = sorted((p.severity, p.message) for p in w.problems() if p.severity != "warning")
+    assert kinds == [("pending", "`fresh::Battery::command` is proposed, not written yet")]
+    w = walk(repo, "# W\n\n```walk proposed rust\nBattery::command\npub fn command() {}\n```\n")
+    assert [p.message for p in w.problems() if p.severity == "error"] == ["`Battery::command` names 2 symbols: qualify it"]
+
+
 # r[verify ref.nearest]
 def test_a_name_that_matches_nothing_suggests_the_nearest(repo):
     sym, candidates = ctx(repo).index.resolve("comand")
@@ -115,7 +135,7 @@ def test_a_symbol_starts_at_its_doc_comments_and_markers(repo):
     assert sym.markers == [("impl", "hold.margin", 1)]
 
 
-# r[verify index.languages]
+# r[verify index.languages+2]
 def test_an_impl_block_is_named_by_impl_and_its_type(repo):
     index = ctx(repo).index
     sym, candidates = index.resolve("impl Battery")
@@ -123,6 +143,141 @@ def test_an_impl_block_is_named_by_impl_and_its_type(repo):
     sym, _ = index.resolve("impl other::Battery")
     assert sym and sym.kind == "impl"
     assert index.shortest_unique(sym) == "impl other::Battery"
+
+
+STORING = """\
+//! What's stored.
+//!
+//! More about it.
+
+pub fn store() {}
+"""
+
+
+@pytest.fixture
+def filed(repo: Path) -> Path:
+    (repo / "src/lib.rs").write_text(LIB + "\npub mod core;\n")
+    (repo / "src/core").mkdir()
+    (repo / "src/core/mod.rs").write_text("pub mod storing;\n")
+    (repo / "src/core/storing.rs").write_text(STORING)
+    (repo / "src/main.rs").write_text("fn main() {}\n")
+    return repo
+
+
+# r[verify index.files]
+# r[verify index.languages+2]
+def test_a_file_is_a_symbol_named_by_its_module_with_its_module_docs(filed, pyrepo):
+    index = ctx(filed).index
+    sym, _ = index.resolve("core::storing")
+    assert sym and sym.kind == "file" and sym.file == "src/core/storing.rs"
+    assert (sym.start, sym.end) == (1, 6)
+    assert sym.doc == "What's stored." and sym.details == "More about it."
+    # The `mod storing;` line isn't a symbol of its own
+    assert not [s for s in index.symbols if s.kind == "mod" and s.name == "storing"]
+    # A crate's root is named by its path only
+    assert index.resolve("lib.rs")[0].kind == "file"
+    assert not [s for s in index.symbols if s.qualified == "crate"]
+    # A Python module, with its docstring
+    py, _ = pyctx(pyrepo).index.resolve("pkg::store")
+    assert py and py.kind == "file" and py.doc == "A module."
+
+
+# r[verify ref.file]
+def test_a_file_is_named_by_its_path_or_any_tail_of_it(filed):
+    index = ctx(filed).index
+    for ref in ("src/core/storing.rs", "core/storing.rs", "storing.rs"):
+        sym, _ = index.resolve(ref)
+        assert sym and sym.file == "src/core/storing.rs", ref
+    # A tail on `/` boundaries only
+    assert index.resolve("ore/storing.rs")[0] is None
+    sym, candidates = index.resolve("lib.rs")
+    assert sym and sym.file == "src/lib.rs"
+    (filed / "src/other").mkdir()
+    (filed / "src/other/storing.rs").write_text("")
+    sym, candidates = ctx(filed).index.resolve("storing.rs")
+    assert sym is None and {c.file for c in candidates} == {"src/core/storing.rs", "src/other/storing.rs"}
+
+
+# r[verify ref.file]
+def test_an_item_is_meant_over_the_file_of_the_same_name(filed):
+    (filed / "src/core/storing.rs").write_text(STORING + "pub fn storing() {}\n")
+    sym, _ = ctx(filed).index.resolve("storing")
+    assert sym and sym.kind == "fn"
+
+
+# r[verify ref.sig+2]
+def test_a_files_outline_is_its_module_docs(filed):
+    sym, _ = ctx(filed).index.resolve("core::storing")
+    assert sym.outline == [(1, 3)]
+    path = filed / "docs/walk.md"
+    path.write_text("```walk\ncore::storing sig\n```\n")
+    html, _ = render(Walk(ctx(filed), "docs/walk.md"))
+    assert "More about it" in html and "pub fn store" not in html
+
+
+# r[verify check.whole-file]
+def test_a_whole_file_in_a_walk_block_is_a_warning(filed):
+    w = walk(
+        filed,
+        """\
+        ```walk
+        core::storing
+        core::storing sig
+        core::storing > pub fn store
+        ```
+        """,
+    )
+    warnings = [p for p in w.problems() if p.severity == "warning"]
+    assert [p.line for p in warnings] == [2]
+
+
+DOCUMENTED = """\
+/// Holds a battery back by [`MARGIN`], kept by [`Self::check`].
+///
+/// ```compile_fail,E0616
+/// # use crate::Battery;
+/// let x = 1;
+/// ```
+pub struct Held;
+
+impl Held {
+    pub fn check(&self) {}
+}
+"""
+
+
+# r[verify embed.docs]
+def test_rust_doc_comments_are_shown_as_markdown_with_their_lines_as_written_too(repo):
+    (repo / "src/held.rs").write_text(DOCUMENTED)
+    (repo / "docs/walk.md").write_text("```walk\nHeld\n```\n")
+    html, _ = render(Walk(ctx(repo), "docs/walk.md"))
+    prose = html.split('class="doc rust"')[1].split('class="row raw"')[0]
+    # Markdown, with intra-doc links to the symbols they name, `Self` its own type
+    assert 'data-ref="MARGIN"' in prose and 'data-ref="Held::check"' in prose
+    # A code block highlighted as Rust, with its rustdoc attributes, and without the
+    # lines rustdoc hides
+    assert "compile_fail, E0616" in prose and "use crate" not in prose
+    assert '<span class="kd">let</span>' in prose or '<span class="k">let</span>' in prose
+    # Its lines as written are there too, to be shown instead
+    assert html.count('class="row raw"') == 6 and 'data-action="as-written"' in html
+
+
+# r[verify embed.docs]
+def test_a_numpy_docstrings_entries_are_shown_with_their_types_as_code(pyrepo):
+    (pyrepo / "pkg/outlined.py").write_text(OUTLINED)
+    (pyrepo / "docs/walk.md").write_text("```walk\noutlined::Store\n```\n")
+    html, _ = render(Walk(pyctx(pyrepo), "docs/walk.md"))
+    prose = html.split('class="doc python"')[1].split('class="row raw"')[0]
+    assert "<p>Keeps things.</p>" in prose and '<div class="doc-h">Parameters</div>' in prose
+    assert '<dt><code class="doc-name">root</code> : <code>str</code></dt><dd><p>Where.</p>' in prose
+
+
+# r[verify embed.docs]
+def test_a_type_alone_in_returns_or_raises_is_a_type(repo):
+    from codewalk.web.docs import python_doc_html
+
+    doc = python_doc_html(['"""Do it.', "", "Returns", "-------", "list of str", "    Each `x`.", '"""'])
+    assert "<dt><code>list of str</code></dt><dd><p>Each <code>x</code>.</p>" in doc
 
 
 def test_a_member_keeps_its_owner_in_its_shortest_name(repo):
@@ -206,7 +361,7 @@ def test_broken_references_are_errors_on_their_lines(repo):
     assert all(p.severity == "error" for p in w.problems())
 
 
-# r[verify ref.focus]
+# r[verify ref.focus+2]
 def test_a_focus_shows_only_the_block_its_line_opens(repo):
     w = walk(
         repo,
@@ -224,7 +379,35 @@ def test_a_focus_shows_only_the_block_its_line_opens(repo):
     assert len(lines) == 4
 
 
-# r[verify ref.focus]
+# r[verify ref.focus+2]
+def test_a_focus_runs_to_the_end_of_the_statement_its_line_starts(repo):
+    (repo / "src/wrap.rs").write_text(
+        textwrap.dedent(
+            """\
+            pub fn post(id: Option<u32>, started: bool) -> bool {
+                let first = 1;
+                let continues =
+                    id.is_some() && !started;
+                continues
+            }
+            """
+        )
+    )
+    w = walk(
+        repo,
+        """\
+        ```walk
+        wrap::post > let continues =
+        ```
+        """,
+    )
+    (ref,) = w.refs
+    assert ref.symbol, ref.error
+    lines = ref.symbol.text(w.ctx.index.files).split("\n")
+    assert [line.strip() for line in lines] == ["let continues =", "id.is_some() && !started;"]
+
+
+# r[verify ref.focus+2]
 def test_a_focus_that_matches_no_line_is_an_error(repo):
     w = walk(
         repo,
@@ -366,10 +549,10 @@ def pyctx(repo: Path) -> Context:
 
 
 # r[verify index.python-path]
-# r[verify index.languages]
+# r[verify index.languages+2]
 def test_python_symbols_are_named_from_their_package(pyrepo):
     index = pyctx(pyrepo).index
-    names = {s.qualified: s.kind for s in index.symbols if s.file.endswith(".py")}
+    names = {s.qualified: s.kind for s in index.symbols if s.file.endswith(".py") and s.kind != "file"}
     assert names == {
         "pkg::store::LIMIT": "const",
         "pkg::store::Store": "class",
@@ -506,7 +689,7 @@ def test_the_pages_render(client):
     assert client.get("/edit/docs/walk.md").status_code == 200
 
 
-# r[verify serve.local]
+# r[verify serve.local+2]
 def test_only_codewalks_can_be_edited_or_saved(client, repo):
     assert client.get("/edit/src/lib.rs").status_code == 403
     assert client.post("/api/save", json={"path": "src/lib.rs", "text": "oops"}).status_code == 403
@@ -528,6 +711,25 @@ def test_symbols_and_files_are_served_for_the_palette_and_the_context_panel(clie
     view = client.get("/api/file", params={"path": "src/lib.rs"}).json()
     assert view["file"] == "src/lib.rs" and len(view["lines"]) == len(LIB.split("\n"))
     assert client.get("/api/file", params={"path": "../etc/passwd"}).status_code == 404
+
+
+# r[verify serve.files]
+def test_a_source_outside_the_root_is_shown_beside_the_page(tmp_path):
+    from starlette.testclient import TestClient
+
+    from codewalk.web.server import make_app
+
+    root = tmp_path / "here"
+    (root / "docs").mkdir(parents=True)
+    (tmp_path / "there/src").mkdir(parents=True)
+    (tmp_path / "there/src/lib.rs").write_text(LIB)
+    (tmp_path / "secret.rs").write_text("pub fn secret() {}\n")
+    (root / "docs/walk.md").write_text("# Walk\n\n```walk\nMARGIN\n```\n")
+    with TestClient(make_app(Context(root, Config(sources=["../there/src/**/*.rs"])), watch=False)) as client:
+        view = client.get("/api/file", params={"path": "../there/src/lib.rs"}).json()
+        assert view["file"] == "../there/src/lib.rs" and len(view["lines"]) == len(LIB.split("\n"))
+        assert view["zed"] == f"zed://file/{(tmp_path / 'there/src/lib.rs').resolve()}"
+        assert client.get("/api/file", params={"path": "../secret.rs"}).status_code == 404
 
 
 # ---- Proposals ----------------------------------------------------------------------------
@@ -589,7 +791,7 @@ def test_a_settled_thread_can_still_be_answered_or_decided_on(repo):
     assert all(f'data-kind="{k}"' in body for k in ("answer", "question", "decision")) and 'data-mode="changelog"' in body
 
 
-# r[verify proposal.settle]
+# r[verify proposal.settle+2]
 # r[verify proposal.progress+2]
 def test_once_written_a_proposal_shows_the_code_against_the_draft_and_can_be_settled(repo):
     from codewalk.walk.doc import settle
@@ -827,6 +1029,29 @@ def test_terms_are_cited_and_mentioned_and_unknown_ones_are_errors(repo):
     body, data = render(w)
     assert body.count('class="mention"') == 1
     assert 'class="term fact"' in body and set(data["terms"]) == {"t:deadband", "f:market.periods"}
+
+
+# r[verify embed.definitions]
+def test_terms_and_facts_in_a_walk_block_are_one_table_of_their_definitions(repo):
+    (repo / "docs/glossary.md").write_text(GLOSSARY)
+    w = walk(
+        repo,
+        "# W\n\n```walk\nt:deadband\nf:market.periods\nt:nope\nMARGIN\nt:settlement-period\n```\n",
+    )
+    assert [p.message for p in w.problems()] == ["no term `nope`"]
+    body, data = render(w)
+    # A run of them is one table, in order; a symbol between breaks it
+    assert body.count('<table class="definitions">') == 2
+    first = body.index("How far above its target import can rise before we act.")
+    assert first < body.index("Markets settle every 15 minutes.") < body.index('data-ref="MARGIN"')
+    assert body.index('data-ref="MARGIN"') < body.index("A 15-minute period.")
+    assert ">deadband<" in body and "market.periods" in body and "observed" in body
+    assert {"t:deadband", "f:market.periods", "t:settlement-period"} <= set(data["terms"])
+    out = w.export("docs/out.md")
+    assert "| Term | Meaning |" in out
+    assert "| [deadband](glossary.md#L3) | How far above its target import can rise before we act. |" in out
+    assert "| [`market.periods`](glossary.md#L9) (observed) | Markets settle every 15 minutes. |" in out
+    assert "**Unresolved:** `t:nope`" in out
 
 
 # r[verify glossary.cite]
@@ -1077,7 +1302,7 @@ class Store:
 '''
 
 
-# r[verify ref.sig]
+# r[verify ref.sig+2]
 def test_sig_shows_a_python_classs_docstring_fields_and_init_header(pyrepo):
     (pyrepo / "pkg/outlined.py").write_text(OUTLINED)
     c = pyctx(pyrepo)
@@ -1129,6 +1354,56 @@ def test_a_change_to_a_codewalk_or_the_code_reaches_the_pages(repo):
     assert app.changed({str(repo / "docs/walk.md")}).docs == ["docs/walk.md"]
     (repo / "src/lib.rs").write_text(LIB + "\npub fn more() {}\n")
     assert app.changed({str(repo / "src/lib.rs")}).code
+
+
+# r[verify serve.live.settle]
+def test_a_moved_source_is_indexed_at_its_new_path(repo):
+    from codewalk.web.server import App
+
+    (repo / "src/v2").mkdir()
+    (repo / "src/v2/service.rs").write_text("pub fn run() {}\n")
+    app = App(ctx(repo))
+    assert app.ctx.index.resolve("run")[0].file == "src/v2/service.rs"
+    (repo / "src/v2/service.rs").rename(repo / "src/service.rs")
+    (repo / "src/v2").rmdir()
+    assert app.changed({str(repo / "src/v2/service.rs"), str(repo / "src/service.rs")}).code
+    assert app.ctx.index.resolve("run")[0].file == "src/service.rs"
+
+
+# r[verify serve.live.settle]
+def test_a_source_gone_while_the_index_is_read_is_left_out(repo, monkeypatch):
+    index = ctx(repo).index
+    found = index.paths()
+    monkeypatch.setattr(index, "paths", lambda: [*found, "src/gone.rs"])
+    index.refresh()
+    assert {s.file for s in index.symbols} == {"src/lib.rs"}
+
+
+# r[verify serve.live.settle]
+def test_a_change_caught_half_made_is_read_again_and_never_stops_the_watching(repo, monkeypatch):
+    import asyncio
+
+    from codewalk.web.server import App
+
+    app = App(ctx(repo))
+    real, calls = app.changed, []
+
+    def flaky(paths):
+        calls.append(paths)
+        if len(calls) == 1:
+            raise FileNotFoundError("src/lib.rs went mid-read")
+        return real(paths)
+
+    monkeypatch.setattr(app, "changed", flaky)
+    (repo / "src/lib.rs").write_text(LIB + "\npub fn more() {}\n")
+    assert asyncio.run(app.catch_up({str(repo / "src/lib.rs")}, wait=0)).code
+    assert len(calls) == 2
+
+    def broken(paths):
+        raise ValueError("the review file is half-written")
+
+    monkeypatch.setattr(app, "changed", broken)
+    assert asyncio.run(app.catch_up({str(repo / "codewalk.review.json")}, tries=3, wait=0)) is None
 
 
 # r[verify review.people]
@@ -1303,7 +1578,7 @@ def test_a_term_a_prd_redefines_or_defines_and_cites_is_not_an_error(repo):
     assert [p.message for p in other.problems()] == ["no term `site`"]
 
 
-# r[verify prd.check]
+# r[verify prd.check+2]
 def test_check_fails_on_a_prd_that_changes_a_requirement_without_a_new_version(repo, monkeypatch):
     from click.testing import CliRunner
 
@@ -1315,6 +1590,24 @@ def test_check_fails_on_a_prd_that_changes_a_requirement_without_a_new_version(r
     prd(repo, PRD.format(stage="spec") + "\nr[battery.command]\nSomething else.\n")
     out = CliRunner().invoke(main, ["check"])
     assert out.exit_code == 1 and "without a new version" in out.output and "docs/prd/x.md" in out.output
+
+
+# r[verify prd.check+2]
+def test_a_done_prd_isnt_checked_against_the_spec_as_it_has_moved_on(repo, monkeypatch):
+    from click.testing import CliRunner
+
+    from codewalk.cli import main
+
+    monkeypatch.chdir(repo)
+    stale = PRD.format(stage="work") + "\nr[battery.command]\nSomething else.\n"
+    w = prd(repo, stale)
+    assert w.done and CliRunner().invoke(main, ["check"]).exit_code == 0
+    # At the work stage with a proposal still to settle, it's checked as any other
+    waiting = stale + "\n```walk proposed rust\n?crate::Battery::stop\npub fn stop(&mut self) {}\n```\n"
+    w = prd(repo, waiting)
+    assert not w.done
+    out = CliRunner().invoke(main, ["check"])
+    assert out.exit_code == 1 and "without a new version" in out.output
 
 
 # r[verify prd.stage]
@@ -1368,7 +1661,26 @@ def test_a_new_prd_has_a_section_for_each_stage_and_nothing_in_hand(repo, monkey
     assert not w.problems() and not w.threads and w.progress().proposed == 0
 
 
-# r[verify proposal.change]
+# r[verify proposal.draft+2]
+def test_a_proposal_named_with_a_question_mark_is_the_name_without_it(repo):
+    w = walk(repo, "# W\n\n```walk proposed rust\n?crate::Battery::command\npub fn command() {}\n```\n")
+    (proposal,) = [r for r in w.refs if r.kind == "proposal"]
+    assert proposal.target == "crate::Battery::command" and proposal.symbol is not None
+
+
+# r[verify proposal.indent]
+def test_a_draft_indented_as_its_code_sits_in_the_file_differs_only_where_it_changes(repo):
+    lines = LIB.split("\n")
+    start = lines.index("    /// Tell it what to do.")
+    end = start + lines[start:].index("    }")
+    draft = "\n".join(lines[start : end + 1]).replace("self.power = 0;", "self.power = 1;")
+    w = walk(repo, f"# W\n\n```walk proposed change rust\ncrate::Battery::command\n{draft}\n```\n")
+    body, _ = render(w)
+    assert body.count('class="drow add"') == 1 and body.count('class="drow del"') == 1
+    assert '<span class="drow add"><span class="dt">+</span>            self.power = 1;</span>' in body
+
+
+# r[verify proposal.change+2]
 def test_a_proposed_change_shows_its_draft_against_the_code_until_settled(repo):
     from codewalk.walk.doc import settle
 
@@ -1379,27 +1691,34 @@ def test_a_proposed_change_shows_its_draft_against_the_code_until_settled(repo):
     assert ref.change and ref.symbol and ref.lang == "rust"
     assert (w.progress().proposed, w.progress().written) == (1, 0)
     assert [p.message for p in w.problems() if p.severity != "warning"] == [
-        "a change to `crate::Battery::command` is proposed, not settled yet"
+        "a change to `crate::Battery::command` is proposed, not made yet"
     ]
     body, _ = render(w)
+    # Not made yet, so it's agreed, not settled
+    assert 'data-action="settle"' not in body and 'data-action="agree"' in body
     # From the code as it is to the draft: what the change adds is added
     assert 'class="walk proposal change"' in body
     assert '<span class="drow add"><span class="dt">+</span>    power == 0</span>' in body
     assert '<span class="drow del"><span class="dt">-</span>    match power {</span>' in body
-    assert "```walk settled rust\ncrate::Battery::command\n" in settle(w.text, ref.line, "crate::Battery::command")
+    assert "```walk settled change rust\ncrate::Battery::command\n" in settle(w.text, ref.line, "crate::Battery::command")
     broken = walk(repo, text.replace("crate::Battery::command", "crate::Battery::halt"))
     assert [p.severity for p in broken.problems() if p.severity != "warning"] == ["error"]
 
 
-# r[verify prd.start]
+# r[verify prd.start+2]
 def test_starting_a_prd_from_the_index_writes_it_with_what_was_asked(client, repo):
     r = client.post("/api/prd", json={"title": "Stop a battery!", "ask": "Batteries need stopping."})
-    assert r.json() == {"started": "docs/prd/stop-a-battery.md", "href": "/walk/docs/prd/stop-a-battery.md"}
-    w = Walk(ctx(repo), "docs/prd/stop-a-battery.md")
+    today = date.today().isoformat()
+    rel = f"docs/prds/{today}-1-stop-a-battery.md"
+    assert r.json() == {"started": rel, "href": f"/walk/{rel}"}
+    w = Walk(ctx(repo), rel)
     assert (w.meta.kind, w.meta.stage, w.title) == ("prd", "problem", "Stop a battery!")
     (t,) = w.threads
     assert t.notes[0].kind == "request" and t.request_open and t.notes[0].text.strip() == "Batteries need stopping."
     assert client.post("/api/prd", json={"title": "Stop a battery", "ask": "Again."}).status_code == 409
+    # The next that day is the next number
+    r = client.post("/api/prd", json={"title": "Start a battery", "ask": "And starting."})
+    assert r.json()["started"] == f"docs/prds/{today}-2-start-a-battery.md"
     assert 'data-action="new-prd"' in client.get("/").text
 
 
@@ -1445,15 +1764,19 @@ def test_a_prd_started_from_a_thread_and_the_thread_link_to_each_other(client, r
     (thread,) = Walk(ctx(repo), "docs/walk.md").threads
     assert 'data-action="prd-from-thread"' in client.get("/walk/docs/walk.md").text
     r = client.post("/api/prd", json={"title": "Hold less", "ask": "Hold back less.", "source": "docs/walk.md", "thread": thread.line})
-    assert r.json() == {"started": "docs/prd/hold-less.md", "href": "/walk/docs/prd/hold-less.md"}
-    request = Walk(ctx(repo), "docs/prd/hold-less.md").threads[0].notes[0]
+    rel = f"docs/prds/{date.today().isoformat()}-1-hold-less.md"
+    assert r.json() == {"started": rel, "href": f"/walk/{rel}"}
+    request = Walk(ctx(repo), rel).threads[0].notes[0]
     assert request.kind == "request" and request.text.strip().endswith("From [Walk](../walk.md).")
     (thread,) = Walk(ctx(repo), "docs/walk.md").threads
-    assert [(n.kind, n.text.strip()) for n in thread.all()][-1] == ("note", "Taken up in a PRD: [Hold less](prd/hold-less.md).")
+    assert [(n.kind, n.text.strip()) for n in thread.all()][-1] == (
+        "note",
+        f"Taken up in a PRD: [Hold less](prds/{date.today().isoformat()}-1-hold-less.md).",
+    )
     # A PRD's own threads don't offer it
-    assert 'data-action="prd-from-thread"' not in client.get("/walk/docs/prd/hold-less.md").text
+    assert 'data-action="prd-from-thread"' not in client.get(f"/walk/{rel}").text
     bad = client.post("/api/prd", json={"title": "Other", "ask": "x", "source": "docs/walk.md", "thread": 1})
-    assert bad.status_code == 409 and not (repo / "docs/prd/other.md").exists()
+    assert bad.status_code == 409 and not list((repo / "docs/prds").glob("*-other.md"))
 
 
 # r[verify glossary.define]
@@ -1475,3 +1798,396 @@ def test_the_editor_can_put_the_margin_away(client, repo):
     assert 'id="margin-toggle"' in page and '"margin": true' in page
     css = client.get("/static/app.css").text
     assert ".editor.with-context .preview .prose.spec .margin { display: none; }" in css
+
+
+# ---- Workspaces ----------------------------------------------------------------------------
+
+
+def _project(folder: Path, walk: str = "# Walk\n\nSee [[MARGIN]].\n") -> Path:
+    """A project in `folder`: the tiny crate, its spec, a codewalk, and a `codewalk.toml`."""
+    (folder / "src").mkdir(parents=True)
+    (folder / "src/lib.rs").write_text(LIB)
+    (folder / "docs/spec").mkdir(parents=True)
+    (folder / "docs/spec/spec.md").write_text(SPEC)
+    (folder / "docs/walk.md").write_text(walk)
+    (folder / "codewalk.toml").write_text('sources = ["src/**/*.rs"]\n')
+    return folder
+
+
+@pytest.fixture
+def workspace(tmp_path):
+    _project(tmp_path / "alpha")
+    _project(tmp_path / "beta", "# Beta\n\nSee [[MARGIN]] and [the walk](walk.md).\n")
+    # A folder that could be a project, and a project too deep to be one of this workspace's
+    (tmp_path / "gamma/notes/spec").mkdir(parents=True)
+    (tmp_path / "gamma/Cargo.toml").write_text("[package]\n")
+    _project(tmp_path / "gamma/deeper")
+    return tmp_path
+
+
+@pytest.fixture
+def served(workspace):
+    from starlette.testclient import TestClient
+
+    from codewalk.web.workspace import Workspace
+
+    with TestClient(Workspace(workspace, watch=False).starlette) as c:
+        yield c
+
+
+# r[verify serve.workspace]
+def test_a_workspace_is_the_folders_one_level_down_with_a_codewalk_toml(workspace):
+    from codewalk.web.workspace import find_projects
+
+    assert [p.name for p in find_projects(workspace)] == ["alpha", "beta"]
+
+
+# r[verify serve.workspace-pages]
+def test_each_project_is_served_under_its_own_path_and_its_links_stay_there(served):
+    home = served.get("/", follow_redirects=False)
+    assert home.status_code in (302, 307) and home.headers["location"] == "/p/alpha/"
+    index = served.get("/p/alpha/").text
+    assert 'href="/p/alpha/walk/docs/walk.md"' in index and 'href="/p/alpha/glossary"' in index
+    assert '"base": "/p/alpha"' in index
+    page = served.get("/p/beta/walk/docs/walk.md").text
+    assert 'href="/p/beta/walk/docs/walk.md"' in page and 'class="walklink"' in page
+    assert served.get("/p/beta/api/file", params={"path": "src/lib.rs"}).json()["file"] == "src/lib.rs"
+    assert served.get("/static/app.js").status_code == 200
+
+
+# r[verify ui.project]
+def test_every_page_offers_the_projects_with_its_own_chosen(served):
+    page = served.get("/p/beta/walk/docs/walk.md").text
+    assert '<option value="alpha">alpha</option>' in page
+    assert '<option value="beta" selected>beta</option>' in page
+    assert "Add project…" in page
+    js = served.get("/static/app.js").text
+    assert "location.href = `/p/${encodeURIComponent(pick.value)}/`" in js
+
+
+# r[verify ui.project-add]
+# r[verify serve.local+2]
+def test_a_folder_is_added_as_a_project_with_its_chosen_folders(served, workspace):
+    info = served.get("/api/workspace").json()
+    assert info["projects"] == ["alpha", "beta"]
+    (gamma,) = info["candidates"]
+    assert gamma["name"] == "gamma" and gamma["sources"] == ["src/**/*.rs"]
+    assert {"notes", "notes/spec", "deeper"} <= set(gamma["folders"])
+
+    out = served.post("/api/workspace/projects", json={"folder": "gamma", "docs": "notes", "specs": "notes/spec"})
+    assert out.json() == {"project": "gamma", "href": "/p/gamma/"}
+    toml = (workspace / "gamma/codewalk.toml").read_text()
+    assert 'sources = ["src/**/*.rs"]' in toml and 'specs = ["notes/spec/**/*.md"]' in toml
+    assert 'docs = ["notes/**/*.md"]' in toml
+    assert served.get("/p/gamma/").status_code == 200
+    assert served.get("/api/workspace").json()["projects"] == ["alpha", "beta", "gamma"]
+
+    assert served.post("/api/workspace/projects", json={"folder": "gamma", "docs": "notes"}).status_code == 409
+    assert served.post("/api/workspace/projects", json={"folder": "../elsewhere", "docs": "x"}).status_code == 409
+    assert not (workspace.parent / "elsewhere").exists()
+
+
+# ---- Reading a branch's worktrees ----------------------------------------------------------
+
+
+def _git(cwd: Path, *args: str) -> None:
+    import subprocess
+
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, env=env)
+
+
+WALK_ON_BRANCH = """\
+# Walk
+
+```walk
+MARGIN
+src::Battery::command
+other::Battery
+src::fresh
+```
+"""
+
+
+@pytest.fixture
+def branched(tmp_path):
+    """A project and a crate beside it, each a repository with a worktree on `feat`: there,
+    the crate changes `MARGIN`, drops `other`, and adds `fresh`."""
+    crate, project = tmp_path / "crate", tmp_path / "project"
+    (crate / "src").mkdir(parents=True)
+    (crate / "src/lib.rs").write_text(LIB)
+    (project / "src").mkdir(parents=True)
+    (project / "src/lib.rs").write_text("/// The project's own.\npub fn own() {}\n")
+    (project / "docs").mkdir()
+    (project / "docs/walk.md").write_text(WALK_ON_BRANCH)
+    (project / "codewalk.toml").write_text('sources = ["src/**/*.rs", "../crate/src/**/*.rs"]\n')
+    for repo in (crate, project):
+        _git(repo, "init", "-q", "-b", "main")
+        _git(repo, "add", ".")
+        _git(repo, "commit", "-q", "-m", "start")
+        _git(repo, "worktree", "add", "-q", "-b", "feat", f"../{repo.name}-feat", "main")
+    changed = LIB.replace("MARGIN: u32 = 5", "MARGIN: u32 = 7")
+    changed = changed[: changed.index("pub mod other")] + "/// New on the branch.\npub fn fresh() {}\n"
+    (tmp_path / "crate-feat/src/lib.rs").write_text(changed)
+    return project
+
+
+def _branch_ctx(project: Path):
+    from codewalk.code.worktrees import branches
+
+    config = Config.load(project)
+    return Context(project, config, branches(project, config.sources)["feat"])
+
+
+# r[verify review.branches]
+# r[verify review.branch-base]
+def test_a_branch_with_worktrees_in_the_projects_repositories_is_found_with_its_base(branched):
+    from codewalk.code.worktrees import branches
+
+    found = branches(branched, Config.load(branched).sources)
+    assert list(found) == ["feat"]
+    checkouts = {c.prefix: c for c in found["feat"].checkouts}
+    assert set(checkouts) == {"", "../crate/"}
+    assert checkouts["../crate/"].worktree.name == "crate-feat" and checkouts["../crate/"].base_ref == "main"
+
+
+# r[verify review.branch-code]
+def test_on_a_branch_the_code_is_read_from_its_worktrees_under_the_same_names(branched):
+    ctx = _branch_ctx(branched)
+    sym, _ = ctx.index.resolve("MARGIN")
+    assert sym.file == "../crate/src/lib.rs" and "= 7" in sym.text(ctx.index.files)
+    assert ctx.index.where(sym.file).parent.parent.name == "crate-feat"
+    assert ctx.index.resolve("other::Battery")[0] is None
+    assert Context(branched, Config.load(branched)).index.resolve("other::Battery")[0] is not None
+
+
+# r[verify review.branch-diff]
+# r[verify review.branch-gone]
+def test_on_a_branch_each_symbol_is_shown_against_where_the_branch_started(branched):
+    body, _ = render(Walk(_branch_ctx(branched), "docs/walk.md"))
+    figures = body.split("<figure")[1:]
+    margin, command, other, fresh = figures
+    assert "changed on feat" in margin and '<pre class="diff branch">' in margin
+    assert '<span class="drow del"><span class="dt">-</span>pub const MARGIN: u32 = 5;</span>' in margin
+    assert '<span class="drow add"><span class="dt">+</span>pub const MARGIN: u32 = 7;</span>' in margin
+    assert "unchanged on feat" in command and '<pre class="code">' in command
+    assert "gone on feat" in other and 'class="drow add"' not in other
+    assert '<span class="drow del"><span class="dt">-</span>pub struct Battery;</span>' in other
+    assert "new on feat" in fresh
+
+
+# r[verify review.branch-pick]
+# r[verify review.branch-code]
+def test_a_branch_is_chosen_for_every_page_and_back_without_writing_anything(branched):
+    from starlette.testclient import TestClient
+
+    from codewalk.web.server import make_app
+
+    before = {p: p.read_bytes() for p in branched.parent.rglob("*") if p.is_file() and ".git" not in p.parts}
+    with TestClient(make_app(Context(branched, Config.load(branched)), watch=False)) as client:
+        assert "Code: as checked out" in client.get("/walk/docs/walk.md").text
+        listed = client.get("/api/branches").json()
+        assert listed == {"current": None, "branches": [{"name": "feat", "repos": ["project", "crate"], "base": ["main"]}]}
+        assert client.post("/api/branch", json={"branch": "feat"}).json() == {"branch": "feat"}
+        page = client.get("/walk/docs/walk.md").text
+        assert "Code: feat" in page and "changed on feat" in page
+        assert client.post("/api/branch", json={"branch": "nope"}).status_code == 404
+        client.post("/api/branch", json={"branch": None})
+        assert "changed on feat" not in client.get("/walk/docs/walk.md").text
+    after = {p: p.read_bytes() for p in branched.parent.rglob("*") if p.is_file() and ".git" not in p.parts}
+    assert after == before
+
+
+# ---- Pinning a codewalk to a ref ----------------------------------------------------------
+
+PINNED = """\
+---
+at: walks/v1
+---
+
+# Walk
+
+See [[other::Battery]].
+
+```walk
+MARGIN
+other::Battery
+```
+"""
+
+
+@pytest.fixture
+def pinned(repo):
+    """The repository tagged `walks/v1`, then `MARGIN` changed and `other` dropped, with a
+    codewalk pinned to the tag."""
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "start")
+    _git(repo, "tag", "walks/v1")
+    now = LIB.replace("MARGIN: u32 = 5", "MARGIN: u32 = 7")
+    (repo / "src/lib.rs").write_text(now[: now.index("pub mod other")])
+    (repo / "docs/walk.md").write_text(PINNED)
+    return repo
+
+
+# r[verify pin.at]
+# r[verify pin.everywhere]
+def test_a_pinned_codewalk_is_read_at_its_ref_from_git_without_writing_anything(pinned):
+    before = {p: p.read_bytes() for p in pinned.rglob("*") if p.is_file() and ".git" not in p.parts}
+    w = Walk(ctx(pinned), "docs/walk.md")
+    assert w.problems() == []
+    assert w.ctx.pin.ref == "walks/v1" and w.ctx.index.on_disk("src/lib.rs") is None
+    import re
+
+    body = re.sub(r"<[^>]+>", "", render(w)[0])
+    assert "MARGIN: u32 = 5" in body and "pub struct Battery;" in body
+    assert "= 7" not in body
+    assert "MARGIN: u32 = 5" in w.export("docs/out.md")
+    # The project itself is read as it is
+    assert ctx(pinned).index.resolve("other::Battery")[0] is None
+    after = {p: p.read_bytes() for p in pinned.rglob("*") if p.is_file() and ".git" not in p.parts}
+    assert after == before
+
+
+# r[verify pin.broken]
+def test_a_pin_that_names_no_commit_is_an_error(pinned):
+    (pinned / "docs/walk.md").write_text(PINNED.replace("walks/v1", "walks/nope"))
+    problems = Walk(ctx(pinned), "docs/walk.md").problems()
+    assert any(p.line == 1 and p.severity == "error" and "walks/nope" in p.message for p in problems)
+
+
+# r[verify pin.label]
+# r[verify pin.everywhere]
+def test_a_pinned_codewalks_page_and_files_beside_it_are_at_its_ref(pinned):
+    from starlette.testclient import TestClient
+
+    from codewalk.web.server import make_app
+
+    with TestClient(make_app(ctx(pinned), watch=False)) as client:
+        page = client.get("/walk/docs/walk.md").text
+        assert "Pinned at walks/v1" in page and '"at": "walks/v1"' in page
+        view = client.get("/api/file", params={"path": "src/lib.rs", "at": "walks/v1"}).json()
+        assert view["zed"] is None and any(o["qualified"] == "other" for o in view["outline"])
+        now = client.get("/api/file", params={"path": "src/lib.rs"}).json()
+        assert now["zed"] and not any(o["qualified"] == "other" for o in now["outline"])
+        named = client.get("/api/named", params={"name": "Battery", "file": "src/lib.rs", "line": 47, "at": "walks/v1"})
+        assert named.json()["qualified"] == "other::Battery"
+        assert client.get("/api/file", params={"path": "src/lib.rs", "at": "walks/nope"}).status_code == 404
+
+
+# r[verify pin.own-repo]
+# r[verify pin.everywhere]
+def test_a_pinned_codewalk_reads_other_repositories_as_checked_out_whatever_branch_is_read(branched):
+    _git(branched, "tag", "walks/v1")
+    (branched / "src/lib.rs").write_text("pub fn later() {}\n")
+    (branched / "docs/walk.md").write_text("---\nat: walks/v1\n---\n\n# Walk\n\n```walk\nown\nMARGIN\n```\n")
+    (branched.parent / "crate/src/lib.rs").write_text(LIB.replace("MARGIN: u32 = 5", "MARGIN: u32 = 9"))
+    for c in (Context(branched, Config.load(branched)), _branch_ctx(branched)):
+        w = Walk(c, "docs/walk.md")
+        assert w.problems() == []
+        own = next(r for r in w.embeds if r.target == "own").symbol
+        margin = next(r for r in w.embeds if r.target == "MARGIN").symbol
+        assert own.file == "src/lib.rs"
+        assert "= 9" in margin.text(w.ctx.index.files)
+
+
+# r[verify ui.context-link]
+def test_a_link_to_a_source_file_opens_it_beside_the_page_at_its_lines(repo):
+    w = walk(
+        repo,
+        """\
+        # Walk
+
+        See [the crate](../src/lib.rs), [its margin](../src/lib.rs#L4-L5),
+        [one line](../src/lib.rs#L5), [nothing](../src/nope.rs) and [the web](https://example.com).
+
+        ```walk
+        MARGIN
+        ```
+        """,
+    )
+    body, _ = render(w)
+    assert '<a href="../src/lib.rs" class="srclink" data-file="src/lib.rs">the crate</a>' in body
+    assert 'class="srclink" data-file="src/lib.rs" data-start="4" data-end="5">its margin</a>' in body
+    assert 'data-start="5" data-end="5">one line</a>' in body
+    assert '<a href="../src/nope.rs">nothing</a>' in body
+    assert '<a href="https://example.com">the web</a>' in body
+
+
+# r[verify review.reopen]
+def test_a_reviewed_excerpt_can_be_reopened_so_it_reads_as_not_reviewed(client, repo):
+    assert 'data-action="review"' in client.get("/walk/docs/walk.md").text
+    client.post("/api/review", json={"path": "docs/walk.md", "ref": "MARGIN"})
+    page = client.get("/walk/docs/walk.md").text
+    assert 'data-action="reopen"' in page and 'data-action="review" ' not in page
+    assert client.post("/api/reopen", json={"path": "docs/walk.md", "ref": "MARGIN"}).json() == {"reopened": "MARGIN"}
+    page = client.get("/walk/docs/walk.md").text
+    assert 'data-action="review"' in page and "not reviewed" in page
+    assert "docs/walk.md" not in json.loads((repo / "codewalk.review.json").read_text())
+    assert client.post("/api/reopen", json={"path": "docs/walk.md", "ref": "MARGIN"}).status_code == 404
+
+
+# r[verify embed.names]
+def test_types_variants_and_constants_are_coloured_by_how_theyre_named():
+    from codewalk.code.highlight import highlight_text
+
+    (arm, call) = highlight_text("Setpoint::Idle => x,\nlet band = TOLERANCE_KW.max(power_kw);", "rust")
+    assert '<span class="nc">Setpoint</span>' in arm and '<span class="nc">Idle</span>' in arm
+    assert '<span class="n">x</span>' in arm
+    assert '<span class="no">TOLERANCE_KW</span>' in call and '<span class="n">power_kw</span>' in call
+    (py,) = highlight_text("x = Battery(MARGIN, A)", "python")
+    assert '<span class="nc">Battery</span>' in py and '<span class="no">MARGIN</span>' in py
+    assert '<span class="n">A</span>' in py
+
+
+# r[verify proposal.unsettle]
+# r[verify proposal.settle+2]
+def test_a_settled_block_can_be_unsettled_back_to_the_proposal_it_was(client, repo):
+    # Made: the code is as the draft says, the body as now
+    draft = "/// Tell it what to do.\n// r[impl battery.command]\npub fn command(&mut self, power: i32) -> bool {\n    // … as now …\n}"
+    text = f"# W\n\n```walk proposed change rust\ncrate::Battery::command\n{draft}\n```\n"
+    (repo / "docs/walk.md").write_text(text)
+    assert client.post("/api/settle", json={"path": "docs/walk.md", "line": 4}).json() == {"settled": "crate::Battery::command"}
+    settled = (repo / "docs/walk.md").read_text()
+    assert "```walk settled change rust\n" in settled
+    (ref,) = [r for r in Walk(ctx(repo), "docs/walk.md").refs if r.settled]
+    assert ref.lang == "rust"
+    assert 'data-action="unsettle"' in client.get("/walk/docs/walk.md").text
+    assert client.post("/api/unsettle", json={"path": "docs/walk.md", "line": 4}).json() == {"unsettled": "crate::Battery::command"}
+    assert (repo / "docs/walk.md").read_text() == text
+    assert client.post("/api/unsettle", json={"path": "docs/walk.md", "line": 4}).status_code == 404
+    # A new name's proposal goes back to `walk proposed`
+    from codewalk.walk.doc import settle, unsettle
+
+    assert unsettle(settle(PROPOSAL, 6, "Battery::rest"), 6) == PROPOSAL
+
+
+# r[verify proposal.change+2]
+def test_a_change_is_made_once_the_code_matches_its_draft_with_elisions_for_any_lines(repo):
+    from codewalk.walk.doc import matches_draft
+
+    code = "fn f() {\n    let a = 1;\n\n    a + 1\n}"
+    assert matches_draft(code, "fn f() {\nlet a = 1;\na + 1\n}")
+    assert not matches_draft(code, "fn f() {\n    let a = 2;\n    a + 1\n}")
+    assert matches_draft(code, "fn f() {\n    // … as now …\n}")
+    assert matches_draft(code, "fn f() {\n    let a = 1;\n    // … the rest …\n    a + 1\n}")
+    assert not matches_draft(code, "fn f() {\n    // … as now …\n    a + 2\n}")
+    # Made, it counts as written and can be settled
+    draft = "/// Tell it what to do.\n// r[impl battery.command]\npub fn command(&mut self, power: i32) -> bool {\n    // … as now …\n}"
+    w = walk(repo, f"# W\n\n```walk proposed change rust\ncrate::Battery::command\n{draft}\n```\n")
+    assert (w.progress().proposed, w.progress().written) == (0, 1)
+    assert [p.message for p in w.problems() if p.severity == "pending"] == [
+        "the change to `crate::Battery::command` is made now: settle the proposal"
+    ]
+    body, _ = render(w)
+    assert 'data-action="settle"' in body and "change made" in body
+
+
+# r[verify ui.prd-requirement]
+def test_a_prds_requirement_can_be_opened_in_zed_and_asked_about(repo):
+    w = prd(repo, PRD.format(stage="spec"))
+    body, _ = render(w)
+    req = body[body.index('id="r-battery-command"') :]
+    req = req[: req.index("</div>\n</div>")]
+    assert 'data-md="9" data-md-end="10"' in body
+    assert f'href="zed://file/{(repo / "docs/prd/x.md").resolve()}:9"' in req and 'data-action="ask"' in req

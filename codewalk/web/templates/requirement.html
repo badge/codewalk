@@ -6,12 +6,12 @@
     <span class="kind k-req">req</span>
     <a class="path" href="#" data-req="{{ req.id }}" title="Hover for its text">{{ req.id }}</a>
     <span class="acts">
-      <a class="act" href="/spec/{{ req.file }}?req={{ req.id }}" title="Read it in its spec">Spec</a>
+      <a class="act" href="{{ base() }}/spec/{{ req.file }}?req={{ req.id }}" title="Read it in its spec">Spec</a>
       <button class="act" data-action="copy" title="Copy the reference">Copy</button>
     </span>
   </div>
   <div class="cap-sub">
-    <a class="loc" href="/spec/{{ req.file }}?req={{ req.id }}">{{ req.file }}:{{ req.line }}</a>
+    <a class="loc" href="{{ base() }}/spec/{{ req.file }}?req={{ req.id }}">{{ req.file }}:{{ req.line }}</a>
     <span class="spacer"></span>
     {% set impls = traces | selectattr("kind", "equalto", "impl") | list %}
     {% set verifies = traces | selectattr("kind", "equalto", "verify") | list %}

@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block crumb %}<a href="/">Codewalks</a> / spec / {{ rel }}{% endblock %}
+{% block crumb %}<a href="{{ base() }}/">Codewalks</a> / spec / {{ rel }}{% endblock %}
 {% block actions %}
   <span class="pill">{{ v.defined | length }} requirements</span>
   {% if v.uncited %}<span class="pill warn" title="Requirements here that no prose cites">{{ v.uncited | length }} not in the prose</span>{% endif %}
   {% if v.missing %}<span class="pill err" title="Cited in the prose, not written in the spec yet">{{ v.missing | length }} not in the spec</span>{% endif %}
   {% if v.drifted %}<span class="pill warn" title="Prose or requirement changed since they were reconciled">{{ v.drifted | length }} drifted</span>{% endif %}
   <button class="tb" data-action="reconcile-all" title="Every cited requirement agrees with its prose, as they stand">They all agree</button>
-  <a class="tb primary" href="/edit/{{ rel }}" data-action="edit" title="Edit, at this point (e)">Edit <kbd>e</kbd></a>
+  <a class="tb primary" href="{{ base() }}/edit/{{ rel }}" data-action="edit" title="Edit, at this point (e)">Edit <kbd>e</kbd></a>
 {% endblock %}
 {% block body %}
 <div class="layout spec-page">

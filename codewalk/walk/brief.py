@@ -60,7 +60,7 @@ def brief(ctx: Context, rel: str) -> Brief:
             continue
         if r.symbol and not r.change:
             out.written.append(Item(line=r.line, text=f"{r.symbol.file}:{r.symbol.line}", about=[r.target]))
-        elif len(r.candidates) <= 1 or not all(c.name == r.target.split("::")[-1] for c in r.candidates):
+        elif not r.ambiguous:
             d = w.agreement(r)
             agreed = ((f"@{d.author}: " if d.author else "") + d.text.strip()) if d else None
             out.proposed.append(Item(line=r.line, text=r.draft or "", about=[r.target], agreed=agreed))

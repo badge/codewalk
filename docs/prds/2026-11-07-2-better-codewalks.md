@@ -4,7 +4,7 @@ summary: "A codewalk explains code and a PRD changes it; words that aren't alway
 kind: prd
 stage: work
 tags: [ui, prd]
-related: ["authoring-prds.md", "../codewalk.md"]
+related: ["2026-11-07-1-authoring-prds.md", "../codewalk.md"]
 ---
 
 # Better codewalks
@@ -168,7 +168,7 @@ else the block at the top of the window, at the same height in the window.
 >   opening and closing.
 > - **The editor** gets the toggle for a spec file too, which said it had no margin.
 > - **`Library::uses`** moved to a PRD of its own,
->   [From the code back to codewalks](from-the-code-back-to-codewalks.md), at the prose
+>   [From the code back to codewalks](2026-11-07-3-from-the-code-back-to-codewalks.md), at the prose
 >   stage, with what its thread decided.
 
 ### The word
